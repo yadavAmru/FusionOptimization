@@ -6,8 +6,6 @@ import numpy as np
 import glob
 import cv2
 import os
-import locale
-import tensorflow as tf
 from tensorflow import keras
 from tensorflow.keras import layers
 from tensorflow.keras.models import Sequential
@@ -58,7 +56,7 @@ def load_house_attributes(inputPath):
 			idxs = df[df["zipcode"] == zipcode].index
 			df.drop(idxs, inplace=True)
 	# return the data frame
-	return df
+	return df.head(4)
 
 # This loads the data and concatenates the four images into one
 def load_house_images(df, inputPath):
@@ -148,8 +146,7 @@ class ImageData(Dataset):
         self.labels = labels
 
     def __len__(self):
-        # return self.images.shape[0]
-        return 2
+        return self.images.shape[0]
 
     transformations = transforms.Compose([
         transforms.ToTensor(),
@@ -167,13 +164,13 @@ class AttrData(Dataset):
         self.labels = labels
 
     def __len__(self):
-        # return self.attributes.shape[0]
-        return 2
+        return self.attributes.shape[0]
 
     def __getitem__(self, index):
         attribute = self.attributes[index]
         label = self.labels[index]
         return attribute, label
+
 
 n_loaders = os.cpu_count()
 train_image_data = ImageData(trainImagesX, trainY)
@@ -188,6 +185,3 @@ val_attr_loader = torch.utils.data.DataLoader(val_attr_data, batch_size=2, shuff
 
 img_dim = trainImagesX.shape[1] * trainImagesX.shape[2] * trainImagesX.shape[3]
 attr_dim = trainAttrX.shape[1]
-testX_images = trainImagesX[0]
-testX_attributes = trainAttrX[0]
-testY = testY[0]
