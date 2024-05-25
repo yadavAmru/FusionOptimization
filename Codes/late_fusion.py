@@ -1,15 +1,12 @@
 import os
 os.environ['TF_ENABLE_ONEDNN_OPTS'] = '0'
-import keras
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
 import torch.optim as optim
 import numpy as np
 
-from Dataset import testX_images, testX_attributes, testY, img_dim, attr_dim
-from Dataset import train_image_loader, train_attr_loader, val_image_loader, val_attr_loader
-#-----------------------------------------------------MLP model part------------------------------------------------------------------
+#-----------------------------------------------------Definition of functions-----------------------------------------------------
 class MLP(nn.Module):
     def __init__(self, input_dim, output_dim=1):
         super().__init__()
@@ -33,7 +30,7 @@ def train_one_epoch(model, optimizer, train_loader, criterion, device):
     inputs = inputs.to(device)
     labels = labels.to(device)
     outputs = model(inputs)
-    loss = criterion(outputs, labels)
+    loss = criterion(outputs, labels.unsqueeze(1))
     loss.backward()
     optimizer.step()
     loss_step.append(loss.item())
@@ -47,7 +44,7 @@ def validate(model, val_loader, criterion, device):
     inputs = inputs.to(device)
     labels = labels.to(device)
     outputs = model(inputs)
-    val_loss = criterion(outputs, labels)
+    val_loss = criterion(outputs, labels.unsqueeze(1))
     loss_step.append(val_loss.item())
   val_loss_epoch = torch.tensor(loss_step).mean().numpy()
   return val_loss_epoch
@@ -63,7 +60,7 @@ def save_model(model, path, epoch, optimizer, val_loss):
 def load_model(model, path):
     checkpoint = torch.load(path)
     model.load_state_dict(checkpoint['model_state_dict'])
-    print(f"Model {path} is loaded from epoch {checkpoint['epoch']} , loss {checkpoint['loss']}")
+    # print(f"Model {path} is loaded from epoch {checkpoint['epoch']} , loss {checkpoint['loss']}")
     return model
 
 def train(model, optimizer, num_epochs, train_loader, val_loader, criterion, device, path):
@@ -83,37 +80,19 @@ def train(model, optimizer, num_epochs, train_loader, val_loader, criterion, dev
         save_model(model, f'{path}', epoch, optimizer, val_loss)
   return dict_log
 
-#-----------------------------------------------------Main part------------------------------------------------------------------
-if __name__ == "__main__":
+#----------------------------------------------------Late fusion---------------------------------------------------------------
+def late_fusion(attr_dim, img_dim, train_attr_loader, train_image_loader, val_attr_loader, val_image_loader, device, lr=0.01, num_epochs=1, criterion=nn.L1Loss()):
     mlp_num = MLP(input_dim=attr_dim)
     mlp_img = MLP(input_dim=img_dim)
-    device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
-    optimizer1 = optim.Adam(mlp_num.parameters(), lr=0.01)
-    optimizer2 = optim.Adam(mlp_img.parameters(), lr=0.01)
-    criterion = nn.L1Loss()
+    optimizer1 = optim.Adam(mlp_num.parameters(), lr=lr)
+    optimizer2 = optim.Adam(mlp_img.parameters(), lr=lr)
 #Training
     mlp_num_path = 'best_num_late_fusion_model_min_val_loss.pth'
     mlp_img_path = 'best_img_late_fusion_model_min_val_loss.pth'
-    num_dict_log = train(mlp_num, optimizer1, 1, train_attr_loader, val_attr_loader, criterion, device, mlp_num_path)
-    img_dict_log = train(mlp_img, optimizer2, 1, train_image_loader, val_image_loader, criterion, device, mlp_img_path)
-#Testing
-    model1 = load_model(mlp_num, mlp_num_path)
-    model1.eval()
-    attr_tensor = torch.from_numpy(testX_attributes)
-    attr_tensor = attr_tensor.to(device)
-    attr_preds = model1(attr_tensor)
-
-    model2 = load_model(mlp_img, mlp_img_path)
-    model2.eval()
-    image_tensor = torch.from_numpy(testX_images)
-    image_tensor = image_tensor.to(device)
-    image_preds = model2(image_tensor)
-
-#-----------------------------------------------------Printing results------------------------------------------------------------------
-    print("-------------------------------------Results-----------------------------------------------")
-    diff = (attr_preds.to('cpu').detach().numpy() + image_preds.to('cpu').detach().numpy())/2 - testY
-    percentDiff = (diff / testY) * 100
-    absPercentDiff = np.abs(percentDiff)
-    mean = np.mean(absPercentDiff)
-    print("Mean: {:.2f}%".format(mean))
-    print("-------------------------------------------------------------------------------------------")
+    num_dict_log = train(mlp_num, optimizer1, num_epochs, train_attr_loader, val_attr_loader, criterion, device, mlp_num_path)
+    img_dict_log = train(mlp_img, optimizer2, num_epochs, train_image_loader, val_image_loader, criterion, device, mlp_img_path)
+#Results of late fusion
+    checkpoint1 = torch.load('best_num_late_fusion_model_min_val_loss.pth')
+    checkpoint2 = torch.load('best_img_late_fusion_model_min_val_loss.pth')
+    loss = (checkpoint1['loss'] + checkpoint2['loss'])/2
+    return loss
