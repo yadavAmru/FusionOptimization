@@ -100,7 +100,7 @@ def fitness_func(ga_instance, solution, solution_idx):
   optimizer_intermediate = optim.Adam(model.parameters(), lr=lr)
   path = 'intermediate_best_model_min_val_loss.pth'
   dict_log = train_intermediate(model, optimizer_intermediate, num_epochs, train_image_loader, train_attr_loader, val_image_loader, val_attr_loader, criterion, device, path)
-  checkpoint = torch.load('best_img_late_fusion_model_min_val_loss.pth')
+  checkpoint = torch.load('intermediate_best_model_min_val_loss.pth')
   loss = checkpoint['loss']
   solution_fitness = 1 / (loss + 1e-6)
   return solution_fitness
