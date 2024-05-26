@@ -7,8 +7,15 @@ import torch.optim as optim
 import numpy as np
 import pygad
 
-from late_fusion import save_model
 #-------------------------------------------Definition of functions---------------------------------------------------------
+def save_model(model, path, epoch, optimizer, val_loss):
+    torch.save({
+        'epoch': epoch,
+        'model_state_dict': model.state_dict(),
+        'optimizer_state_dict': optimizer.state_dict(),
+        'loss': val_loss,
+        }, path)
+    
 def train_one_epoch_intermediate(model, optimizer, train_loader1, train_loader2, criterion, device):
   model.train()
   loss_step = []
