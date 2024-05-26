@@ -1,4 +1,3 @@
-from IPython.display import Image
 from sklearn.preprocessing import LabelBinarizer
 from sklearn.preprocessing import MinMaxScaler
 import pandas as pd
@@ -6,34 +5,12 @@ import numpy as np
 import glob
 import cv2
 import os
-from tensorflow import keras
-from tensorflow.keras import layers
-from tensorflow.keras.models import Sequential
-from tensorflow.keras.layers import BatchNormalization
-from tensorflow.keras.layers import Conv2D
-from tensorflow.keras.layers import MaxPooling2D
-from tensorflow.keras.layers import Activation
-from tensorflow.keras.layers import Dropout
-from tensorflow.keras.layers import Dense
-from tensorflow.keras.layers import Flatten
-from tensorflow.keras.layers import Input
-from tensorflow.keras.models import Model
 from sklearn.model_selection import train_test_split
-from tensorflow.keras.layers import Dense
-from tensorflow.keras.models import Model
-from tensorflow.keras.optimizers import Adam
-from tensorflow.keras.layers import concatenate
-
 import torch
-
 import torch.utils.data as data
 import torchvision.transforms as transforms
-import torchvision.datasets as datasets
-from torch.utils.data import Dataset, DataLoader, ConcatDataset
+from torch.utils.data import Dataset
 import numpy as np
-import copy
-import random
-import time
 
 #-------------------------------------------Loading dataset part------------------------------------------------------------------
 def load_house_attributes(inputPath):
