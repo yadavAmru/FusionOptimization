@@ -1,0 +1,104 @@
+import os
+os.environ['TF_ENABLE_ONEDNN_OPTS'] = '0'
+import torch
+import torch.nn as nn
+import torch.nn.functional as F
+import torch.optim as optim
+import numpy as np
+
+#-----------------------------------------------------Definition of functions-----------------------------------------------------
+class MLP(nn.Module):
+    def __init__(self, input_dim, fusion, n_layers = 5, output_dim=1):
+        super(MLP, self).__init__()
+        self.input_dim = input_dim
+        self.fusion = fusion
+        self.n_layers = n_layers
+        self.output_fc = nn.Linear(4, output_dim)
+        in_nodes = input_dim
+        out_nodes = 64
+        layer_list = nn.ModuleList()
+        for i in range(n_layers):
+            layer_list.append(nn.Linear(in_nodes, out_nodes))
+            layer_list.append(nn.ReLU())
+            in_nodes = out_nodes
+            out_nodes = out_nodes//2
+        self.layers = nn.Sequential(*layer_list)
+
+    def forward(self, x):
+        x = x.view(-1, self.input_dim)
+        x = self.layers(x.float())
+        if self.fusion == "early" or self.fusion ==  "late":
+            y_pred = self.output_fc(x)
+            return y_pred
+        else:
+            raise ValueError("Incorrect fusion mode!!!")
+    
+def train_one_epoch(model, optimizer, train_loader, criterion, device):
+  model.train()
+  loss_step = []
+  for inputs, labels in train_loader:
+    optimizer.zero_grad()
+    inputs = inputs.to(device)
+    labels = labels.to(device)
+    outputs = model(inputs)
+    loss = criterion(outputs, labels.unsqueeze(1))
+    loss.backward()
+    optimizer.step()
+    loss_step.append(loss.item())
+  loss_curr_epoch = np.mean(loss_step)
+  return loss_curr_epoch
+
+def validate(model, val_loader, criterion, device):
+  model.eval()
+  loss_step = []
+  for inputs, labels in val_loader:
+    inputs = inputs.to(device)
+    labels = labels.to(device)
+    outputs = model(inputs)
+    val_loss = criterion(outputs, labels.unsqueeze(1))
+    loss_step.append(val_loss.item())
+  val_loss_epoch = torch.tensor(loss_step).mean().numpy()
+  return val_loss_epoch
+
+def save_model(model, path, epoch, optimizer, val_loss):
+    torch.save({
+        'epoch': epoch,
+        'model_state_dict': model.state_dict(),
+        'optimizer_state_dict': optimizer.state_dict(),
+        'loss': val_loss,
+        }, path)
+
+def load_model(model, path):
+    checkpoint = torch.load(path)
+    model.load_state_dict(checkpoint['model_state_dict'])
+    # print(f"Model {path} is loaded from epoch {checkpoint['epoch']} , loss {checkpoint['loss']}")
+    return model
+
+def train(model, optimizer, num_epochs, train_loader, val_loader, criterion, device, path):
+  dict_log = {"train_loss": [], "val_loss": []}
+  best_val_loss = 1e8
+  model = model.to(device)
+  for epoch in range(num_epochs):
+    loss_curr_epoch = train_one_epoch(model, optimizer, train_loader, criterion, device=device)
+    val_loss = validate(model, val_loader, criterion, device)
+    # Print epoch results to screen
+    print(f'Ep {epoch + 1}/{num_epochs}: Loss: Train {loss_curr_epoch:.3f} \t Val {val_loss:.3f}')
+    dict_log["train_loss"].append(loss_curr_epoch)
+    dict_log["val_loss"].append(val_loss)
+    # Use this code to save the model with the best validation loss
+    if val_loss < best_val_loss:
+        best_val_loss = val_loss
+        save_model(model, f'{path}', epoch, optimizer, val_loss)
+  return dict_log
+
+#----------------------------------------------------Early fusion---------------------------------------------------------------
+def early_fusion(attr_dim, img_dim, train_loader, val_loader, device, lr=0.01, num_epochs=1, criterion=nn.L1Loss()):
+    mlp = MLP(input_dim=attr_dim+img_dim, fusion="early")
+    optimizer = optim.Adam(mlp.parameters(), lr=lr)
+#Training
+    mlp_path = 'best_early_fusion_model_min_val_loss.pth'
+    dict_log = train(mlp, optimizer, num_epochs, train_loader, val_loader, criterion, device, mlp_path)
+#Results of early fusion
+    checkpoint = torch.load('best_early_fusion_model_min_val_loss.pth')
+    loss = checkpoint['loss']
+    return loss
