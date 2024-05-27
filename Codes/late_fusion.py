@@ -8,19 +8,30 @@ import numpy as np
 
 #-----------------------------------------------------Definition of functions-----------------------------------------------------
 class MLP(nn.Module):
-    def __init__(self, input_dim, output_dim=1):
-        super().__init__()
+    def __init__(self, input_dim, fusion, n_layers = 5, output_dim=1):
+        super(MLP, self).__init__()
         self.input_dim = input_dim
-        self.input_fc = nn.Linear(input_dim, 8)
-        self.hidden_fc = nn.Linear(8, 4)
+        self.fusion = fusion
+        self.n_layers = n_layers
         self.output_fc = nn.Linear(4, output_dim)
+        in_nodes = input_dim
+        out_nodes = 64
+        layer_list = nn.ModuleList()
+        for i in range(n_layers):
+            layer_list.append(nn.Linear(in_nodes, out_nodes))
+            layer_list.append(nn.ReLU())
+            in_nodes = out_nodes
+            out_nodes = out_nodes//2
+        self.layers = nn.Sequential(*layer_list)
 
     def forward(self, x):
         x = x.view(-1, self.input_dim)
-        h_1 = F.relu(self.input_fc(x.float()))   #.float()
-        h_2 = F.relu(self.hidden_fc(h_1))
-        y_pred = self.output_fc(h_2)
-        return y_pred
+        x = self.layers(x.float())
+        if self.fusion == "early" or self.fusion ==  "late":
+            y_pred = self.output_fc(x)
+            return y_pred
+        else:
+            raise ValueError("Incorrect fusion mode!!!")
     
 def train_one_epoch(model, optimizer, train_loader, criterion, device):
   model.train()
@@ -82,8 +93,8 @@ def train(model, optimizer, num_epochs, train_loader, val_loader, criterion, dev
 
 #----------------------------------------------------Late fusion---------------------------------------------------------------
 def late_fusion(attr_dim, img_dim, train_attr_loader, train_image_loader, val_attr_loader, val_image_loader, device, lr=0.01, num_epochs=1, criterion=nn.L1Loss()):
-    mlp_num = MLP(input_dim=attr_dim)
-    mlp_img = MLP(input_dim=img_dim)
+    mlp_num = MLP(input_dim=attr_dim, fusion="late")
+    mlp_img = MLP(input_dim=img_dim, fusion="late")
     optimizer1 = optim.Adam(mlp_num.parameters(), lr=lr)
     optimizer2 = optim.Adam(mlp_img.parameters(), lr=lr)
 #Training
