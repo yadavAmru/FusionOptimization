@@ -100,14 +100,14 @@ class MyEnsemble(nn.Module):
         x = self.output_fc(x)
         return x
     
-def fitness_func(ga_instance, solution, solution_idx):
+def fitness_func_GA(ga_instance, solution, solution_idx):
   new_mlp_img = MLP_intermediate(input_dim=img_dim, n_layers = solution[0])
   new_mlp_num = MLP_intermediate(input_dim=attr_dim, n_layers = solution[1])
   model = MyEnsemble(new_mlp_img, new_mlp_num)
   optimizer_intermediate = optim.Adam(model.parameters(), lr=lr)
-  path = 'intermediate_best_model_min_val_loss.pth'
+  path = 'GA_best_model_min_val_loss.pth'
   dict_log = train_intermediate(model, optimizer_intermediate, num_epochs, train_image_loader, train_attr_loader, val_image_loader, val_attr_loader, criterion, device, path)
-  checkpoint = torch.load('intermediate_best_model_min_val_loss.pth')
+  checkpoint = torch.load('GA_best_model_min_val_loss.pth')
   loss = checkpoint['loss']
   solution_fitness = 1 / (loss + 1e-6)
   return solution_fitness
@@ -126,10 +126,10 @@ def interm_fusion_GA(attr_dim_GA, img_dim_GA, train_attr_loader_GA, train_image_
     device, lr, num_epochs, criterion = device_GA, lr_GA, num_epochs_GA, criterion_GA
 
     ga_instance = pygad.GA(num_generations=num_generations,
-                    num_parents_mating=2,
-                    fitness_func=fitness_func,
+                    num_parents_mating=5,
+                    fitness_func=fitness_func_GA,
                     on_generation=callback_generation,
-                    sol_per_pop=2,
+                    sol_per_pop=5,
                     num_genes=2, # Two solutions (one for each model)
                     gene_type=int,
                     gene_space=[(1, 5), (1, 3)],  #  Range for number of layers for each model
