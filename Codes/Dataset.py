@@ -7,11 +7,10 @@ import cv2
 import os
 from sklearn.model_selection import train_test_split
 import torch
-import torch.utils.data as data
 import torchvision.transforms as transforms
 from torch.utils.data import Dataset
-import numpy as np
 
+#-----------------------------------------------------Definition of functions-----------------------------------------------------
 #-------------------------------------------Loading dataset part------------------------------------------------------------------
 def load_house_attributes(inputPath):
 	# initialize the list of column names in the CSV file and then
@@ -70,10 +69,6 @@ def load_house_images(df, inputPath):
 	# return our set of images
 	return np.array(images)
 
-inputPath_house_data = r"Houses-dataset\Houses Dataset\HousesInfo.txt"
-df_house_att = load_house_attributes(inputPath_house_data)
-df_house_img = load_house_images(df_house_att, "Houses-dataset/Houses Dataset")
-
 #-------------------------------------------Preprocessing part------------------------------------------------------------------
 # Process that data and get reshaped data
 def process_house_attributes(df, train, test):
@@ -112,11 +107,7 @@ def preprocessing_part(df_house_att, df_house_img):
 
     return trainAttrX, testAttrX, trainImagesX, testImagesX, trainY, testY
 
-trainAttrX, testAttrX, trainImagesX, testImagesX, trainY, testY = preprocessing_part(df_house_att, df_house_img)
-trainY = np.array(trainY)
-testY = np.array(testY)
-
-#-------------------------------------------Dataset and Dataloader part------------------------------------------------------------------
+#-------------------------------------------Dataset and Dataloader part-------------------------------------------------------------
 class ImageData(Dataset):
     def __init__(self, images, labels):
         self.images = images
@@ -148,8 +139,46 @@ class AttrData(Dataset):
         label = self.labels[index]
         return attribute, label
 
+class CombinedDataset(Dataset):
+    def __init__(self, images, attributes, labels):
+        self.images = images
+        self.attributes = attributes
+        self.labels = labels
+
+    def __len__(self):
+        return self.images.shape[0]
+
+    transformations = transforms.Compose([
+        transforms.ToTensor(),
+    ])
+
+    def __getitem__(self, index):
+        image = self.images[index]
+        transformed_image = self.transformations(image)
+        transformed_image = transformed_image.view(-1)
+        attribute = torch.from_numpy(self.attributes[index])
+        transformed_attribute = attribute.view(-1)
+        img_attr = torch.cat([transformed_image, transformed_attribute], dim=0)
+        label = self.labels[index]
+        return img_attr, label
+    
+#--------------------------------------------------------Main part--------------------------------------------------------------------
+inputPath_house_data = r"Houses-dataset\Houses Dataset\HousesInfo.txt"
+df_house_att = load_house_attributes(inputPath_house_data)
+df_house_img = load_house_images(df_house_att, "Houses-dataset/Houses Dataset")
+
+trainAttrX, testAttrX, trainImagesX, testImagesX, trainY, testY = preprocessing_part(df_house_att, df_house_img)
+trainY = np.array(trainY)
+testY = np.array(testY)
 
 n_loaders = os.cpu_count()
+# Create early fusion Datasets and DataLoaders
+train_dataset = CombinedDataset(trainImagesX, trainAttrX, trainY)
+train_loader = torch.utils.data.DataLoader(train_dataset, batch_size=2, shuffle=True, num_workers=n_loaders)
+val_dataset = CombinedDataset(testImagesX, testAttrX, testY)
+val_loader = torch.utils.data.DataLoader(val_dataset, batch_size=2, shuffle=False, num_workers=n_loaders)
+
+# Create intermediate/late fusion Datasets and DataLoaders
 train_image_data = ImageData(trainImagesX, trainY)
 train_attr_data = AttrData(trainAttrX, trainY)
 train_image_loader = torch.utils.data.DataLoader(train_image_data, batch_size=2, shuffle=True, num_workers=n_loaders)
