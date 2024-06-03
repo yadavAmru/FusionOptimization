@@ -29,7 +29,7 @@ In late fusion, separate models are trained for each data input and the output f
 - The **"late_fusion.py"** file has a code that performs late fusion.
 
 ### C. Intermediate Fusion:
-In intermediate fusion, features are extracted separately from each input data using specialized models. These features are then fused at an intermediate layer, and the combined features are processed jointly to make the final prediction.
+In intermediate fusion, features are extracted separately from each input data using specialized models. These features are then fused at an intermediate layer, and the combined features are processed jointly to make the final prediction. The loss is propagated back to the feature extracting models.
 - The **"intermediate_fusion.py"** file has a code that performs an intermediate fusion of two MLP models with different data types. The process of finding the best fusion location was optimized using a Genetic Algorithm (GA).
 - The **"interm_fusion_GWO.py"** file has a code that performs an intermediate fusion of two MLP models with different data types. The process of finding the best fusion location was optimized using Grey Wolf Optimization (GWO).
 - The **"interm_fusion_PSO.py"** file has a code that performs an intermediate fusion of two MLP models with different data types. The process of finding the best fusion location was optimized using Particle Swarm Optimization (PSO).
