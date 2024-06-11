@@ -1,0 +1,90 @@
+import random
+
+# ----------------------------------------- SMO Implementation -----------------------------------------
+
+def fitness_func_smo(solution, train_image_loader, train_attr_loader, val_image_loader, val_attr_loader, criterion, device, lr, num_epochs):
+    new_mlp_img = MLP_intermediate(input_dim=img_dim, n_layers=solution[0])
+    new_mlp_num = MLP_intermediate(input_dim=attr_dim, n_layers=solution[1])
+    model = MyEnsemble(new_mlp_img, new_mlp_num)
+    optimizer = optim.Adam(model.parameters(), lr=lr)
+    path = 'smo_best_model.pth'
+    dict_log = train_intermediate(model, optimizer, num_epochs, train_image_loader, train_attr_loader, val_image_loader, val_attr_loader, criterion, device, path)
+    checkpoint = torch.load(path)
+    loss = checkpoint['loss']
+    return 1 / (loss + 1e-6)
+
+def initialize_population(pop_size, bounds):
+    population = []
+    for _ in range(pop_size):
+        solution = [random.randint(bounds[0][0], bounds[0][1]), random.randint(bounds[1][0], bounds[1][1])]
+        population.append(solution)
+    return population
+
+def update_positions(population, alpha, beta, delta, bounds):
+    new_population = []
+    for solution in population:
+        new_solution = []
+        for i in range(len(solution)):
+            A1 = 2 * alpha * random.random() - alpha
+            C1 = 2 * random.random()
+            D_alpha = abs(C1 * alpha[i] - solution[i])
+            X1 = alpha[i] - A1 * D_alpha
+
+            A2 = 2 * beta * random.random() - beta
+            C2 = 2 * random.random()
+            D_beta = abs(C2 * beta[i] - solution[i])
+            X2 = beta[i] - A2 * D_beta
+
+            A3 = 2 * delta * random.random() - delta
+            C3 = 2 * random.random()
+            D_delta = abs(C3 * delta[i] - solution[i])
+            X3 = delta[i] - A3 * D_delta
+
+            new_solution.append(int((X1 + X2 + X3) / 3))
+            if new_solution[i] < bounds[i][0]:
+                new_solution[i] = bounds[i][0]
+            elif new_solution[i] > bounds[i][1]:
+                new_solution[i] = bounds[i][1]
+        new_population.append(new_solution)
+    return new_population
+
+def SMO(train_image_loader, train_attr_loader, val_image_loader, val_attr_loader, criterion, device, lr, num_epochs, pop_size=10, num_generations=10, bounds=[(1, 5), (1, 3)]):
+    population = initialize_population(pop_size, bounds)
+    alpha, beta, delta = None, None, None
+    alpha_fitness, beta_fitness, delta_fitness = float('-inf'), float('-inf'), float('-inf')
+
+    for generation in range(num_generations):
+        fitness_values = []
+        for solution in population:
+            fitness = fitness_func_smo(solution, train_image_loader, train_attr_loader, val_image_loader, val_attr_loader, criterion, device, lr, num_epochs)
+            fitness_values.append(fitness)
+
+            if fitness > alpha_fitness:
+                delta_fitness, beta_fitness, alpha_fitness = beta_fitness, alpha_fitness, fitness
+                delta, beta, alpha = beta, alpha, solution
+            elif fitness > beta_fitness:
+                delta_fitness, beta_fitness = beta_fitness, fitness
+                delta, beta = beta, solution
+            elif fitness > delta_fitness:
+                delta_fitness = fitness
+                delta = solution
+
+        population = update_positions(population, alpha, beta, delta, bounds)
+        print(f'Generation {generation+1}: Best Fitness = {alpha_fitness}')
+
+    return alpha
+
+# ----------------------------------------- Main Function -----------------------------------------
+
+if __name__ == "__main__":
+    # Hyperparameters
+    num_epochs = 10
+    lr = 0.001
+    criterion = nn.MSELoss()
+    device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+
+    # Datasets and Dataloaders
+    # Assume train_image_loader, train_attr_loader, val_image_loader, val_attr_loader are defined
+
+    best_solution = SMO(train_image_loader, train_attr_loader, val_image_loader, val_attr_loader, criterion, device, lr, num_epochs)
+    print(f'Best Solution: {best_solution}')
