@@ -13,7 +13,7 @@ class MLP(nn.Module):
         self.input_dim = input_dim
         self.fusion = fusion
         self.n_layers = n_layers
-        self.output_fc = nn.Linear(4, output_dim)
+        self.output_dim = output_dim
         in_nodes = input_dim
         out_nodes = 64
         layer_list = nn.ModuleList()
@@ -23,16 +23,20 @@ class MLP(nn.Module):
             in_nodes = out_nodes
             out_nodes = out_nodes//2
         self.layers = nn.Sequential(*layer_list)
+        self.out_nodes = out_nodes*2
 
     def forward(self, x):
         x = x.view(-1, self.input_dim)
         x = self.layers(x.float())
+        if self.fusion == "intermediate":
+            return x
         if self.fusion == "early" or self.fusion ==  "late":
-            y_pred = self.output_fc(x)
+            output_fc = nn.Linear(self.out_nodes, self.output_dim)
+            y_pred = output_fc(x)
             return y_pred
         else:
             raise ValueError("Incorrect fusion mode!!!")
-    
+
 def train_one_epoch(model, optimizer, train_loader, criterion, device):
   model.train()
   loss_step = []
@@ -92,13 +96,14 @@ def train(model, optimizer, num_epochs, train_loader, val_loader, criterion, dev
   return dict_log
 
 #----------------------------------------------------Early fusion---------------------------------------------------------------
-def early_fusion(attr_dim, img_dim, train_loader, val_loader, device, lr=0.01, num_epochs=1, criterion=nn.L1Loss()):
-    mlp = MLP(input_dim=attr_dim+img_dim, fusion="early")
-    optimizer = optim.Adam(mlp.parameters(), lr=lr)
-#Training
-    mlp_path = 'best_early_fusion_model_min_val_loss.pth'
-    dict_log = train(mlp, optimizer, num_epochs, train_loader, val_loader, criterion, device, mlp_path)
-#Results of early fusion
-    checkpoint = torch.load('best_early_fusion_model_min_val_loss.pth')
+def early_fusion(dimension_dict, train_loader, val_loader, device, lr=0.01, num_epochs=1, criterion=nn.L1Loss()):
+    input_dim = sum(list(dimension_dict.values()))
+    model = MLP(input_dim=input_dim, fusion="early")
+    optimizer = optim.Adam(model.parameters(), lr=lr)
+    #Training
+    model_path = 'best_early_fusion_model.pth'
+    dict_log = train(model, optimizer, num_epochs, train_loader, val_loader, criterion, device, model_path)
+    #Results of early fusion
+    checkpoint = torch.load('best_early_fusion_model.pth')
     loss = checkpoint['loss']
     return loss
