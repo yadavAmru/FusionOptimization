@@ -4,8 +4,8 @@ import torch
 import torch.optim as optim
 import random
 import numpy
-from intermediate_fusion_GA import MLP_intermediate, MyEnsemble, train_intermediate
-from late_fusion import save_model, load_model
+from early_fusion import MLP
+from intermediate_brute_force_search import NewMyEnsemble, new_train_intermediate
 
 #-------------------------------------------Definition of functions---------------------------------------------------------
 def GWO(objf, lb, ub, dim, SearchAgents_no, Max_iter):
@@ -96,28 +96,43 @@ def GWO(objf, lb, ub, dim, SearchAgents_no, Max_iter):
 
         if (l % 1 == 0):
             print([' The number of iterations is ' + str(l) + '  Iterative results of ' + str(Alpha_score)]);  #  Results of each iteration
-    print("The best optimal value of the objective funciton found by GWO is: {:.5f} \t Best solution: {}".format(Alpha_score, numpy.around(Alpha_pos)))
+    print("The best optimal value of the objective funciton found by GWO is: {:.5f} \t Best solution: {}".format(Alpha_score, numpy.around(Alpha_pos).astype(int)))
     return Alpha_pos, Alpha_score
 
-def fitness_func_GWO(solution):
-    new_mlp_img = MLP_intermediate(input_dim=img_dim, n_layers = round(solution[0]))
-    new_mlp_num = MLP_intermediate(input_dim=attr_dim, n_layers = round(solution[1]))
-    model = MyEnsemble(new_mlp_img, new_mlp_num)
-    optimizer_intermediate = optim.Adam(model.parameters(), lr=lr)
-    path = 'GWO_best_model_min_val_loss.pth'
-    dict_log = train_intermediate(model, optimizer_intermediate, num_epochs, train_image_loader, train_attr_loader, val_image_loader, val_attr_loader, criterion, device, path)
-    checkpoint = torch.load('GWO_best_model_min_val_loss.pth')
-    loss = checkpoint['loss']
-    return loss
+def fitness_function_factory_GWO(dimension_dict, loaders_dict, device, lr, num_epochs, criterion):
+    def calculate_loss(dimension_dict, loaders_dict, solution, device, lr, num_epochs, criterion):
+        train_loaders, val_loaders = [], []
+        models = []
+        index = 0
+        for data_type in loaders_dict.keys():
+            train_loaders_per_type, val_loaders_per_type = [], []
+            for i, (train_loader, val_loader) in enumerate(loaders_dict[data_type]):
+                train_loaders_per_type.append(train_loader)
+                val_loaders_per_type.append(val_loader)
+                input_dim = dimension_dict[data_type]
+                model = MLP(input_dim=input_dim, n_layers=round(solution[index]), fusion="intermediate")
+                models.append(model)
+                index += 1
+            train_loaders.extend(train_loaders_per_type)
+            val_loaders.extend(val_loaders_per_type)
+        model = NewMyEnsemble(models, n_layers=round(solution[index]))
+        optimizer = optim.Adam(model.parameters(), lr=lr)
+        #Training
+        model_path = 'GWO_best_model_min_val_loss.pth'
+        dict_log = new_train_intermediate(model, optimizer, num_epochs, train_loaders, val_loaders, criterion, device, model_path)
+        checkpoint = torch.load(model_path)
+        loss = checkpoint['loss']
+        return loss
+
+    def fitness_func_GWO(solution):
+        solution_fitness = calculate_loss(dimension_dict, loaders_dict, solution, device, lr, num_epochs, criterion)
+        return solution_fitness
+    return fitness_func_GWO
 
 #------------------------------------------------- GWO optimization----------------------------------------------------------
-def interm_fusion_GWO(attr_dim_GWO, img_dim_GWO, train_attr_loader_GWO, train_image_loader_GWO, val_attr_loader_GWO, val_image_loader_GWO, device_GWO, lr_GWO, num_epochs_GWO, Max_iter, SearchAgents_no, criterion_GWO):
-    global attr_dim, img_dim, train_attr_loader, train_image_loader, val_attr_loader, val_image_loader, device, lr, num_epochs, criterion
-    attr_dim, img_dim = attr_dim_GWO, img_dim_GWO
-    train_attr_loader, train_image_loader = train_attr_loader_GWO, train_image_loader_GWO
-    val_attr_loader, val_image_loader = val_attr_loader_GWO, val_image_loader_GWO
-    device, lr, num_epochs, criterion = device_GWO, lr_GWO, num_epochs_GWO, criterion_GWO
-    lb, ub = 1, 5 # Lower and upper bounds
-    dim = 2 # Search range of wolf
+def intermediate_fusion_GWO(dimension_dict, loaders_dict, device, lr, num_epochs, Max_iter, SearchAgents_no, criterion):
+    fitness_func_GWO = fitness_function_factory_GWO(dimension_dict, loaders_dict, device, lr, num_epochs, criterion)
+    dim = sum(1 for data_type in loaders_dict.keys() for i in loaders_dict[data_type]) + 1         # Search range of wolf
+    lb, ub = 1, 5       # Lower and upper bounds
     solution, solution_fitness = GWO(fitness_func_GWO, lb, ub, dim, SearchAgents_no, Max_iter)
-    return numpy.around(solution), solution_fitness
+    return numpy.around(solution).astype(int), solution_fitness
