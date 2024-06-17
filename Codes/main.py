@@ -4,7 +4,7 @@ import torch
 import torch.nn as nn
 from Shopee_dataset import dimension_dict, loaders_dict, train_shopee_combined_loader, val_shopee_combined_loader #train_combined_loader, val_combined_loader
 from early_fusion import early_fusion
-from intermediate_brute_force_search import intermediate_brute_force_search
+from intermediate_fusion_brute_force_search import intermediate_fusion_brute_force_search
 from intermediate_fusion_GA import intermediate_fusion_GA
 from intermediate_fusion_GWO import intermediate_fusion_GWO
 from intermediate_fusion_PSO import intermediate_fusion_PSO
@@ -27,7 +27,7 @@ if __name__ == "__main__":
     print("-----------------------------------------------------Start of early fusion--------------------------------------------------------------------")
     early_fusion_loss = early_fusion(dimension_dict, train_shopee_combined_loader, val_shopee_combined_loader, device, lr, num_epochs, criterion)
     print("-------------------------------------Start of intermediate fusion with brute-force search-----------------------------------------------------")
-    intermediate_brute_force_loss, solution = intermediate_brute_force_search(dimension_dict, loaders_dict, device, lr, num_epochs, criterion)
+    intermediate_brute_force_loss, solution = intermediate_fusion_brute_force_search(dimension_dict, loaders_dict, device, lr, num_epochs, criterion)
     print("---------------------------------------------Start of intermediate fusion with GA-------------------------------------------------------------")
     solution_GA, intermediate_fusion_loss_GA = intermediate_fusion_GA(dimension_dict, loaders_dict, device, lr, num_epochs, num_generations, criterion)
     print("---------------------------------------------Start of intermediate fusion with GWO------------------------------------------------------------")
