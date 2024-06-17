@@ -150,7 +150,7 @@ def fitness_function_factory_PSO(dimension_dict, loaders_dict, device, lr, num_e
 def intermediate_fusion_PSO(dimension_dict, loaders_dict, device, lr, num_epochs, max_iter, num_particles, criterion):
     fitness_func_PSO = fitness_function_factory_PSO(dimension_dict, loaders_dict, device, lr, num_epochs, criterion)
     dim = sum(1 for data_type in loaders_dict.keys() for i in loaders_dict[data_type]) + 1         # Number of solutions
-    lb, ub = 1, 5 # Lower and upper bounds
+    lb, ub = 1, 10 # Lower and upper bounds
     w, c1, c2 = 0.5, 1, 2 #inertia weight, personal acceleration factor, social acceleration factor
     solution, fitness = PSO(fitness_func_PSO, max_iter, num_particles, dim, lb, ub)
     return np.around(solution).astype(int), fitness
