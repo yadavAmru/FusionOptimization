@@ -141,7 +141,7 @@ def calculate_loss(dimension_dict, loaders_dict, solution, device, lr, num_epoch
     loss = checkpoint['loss']
     return loss
 
-def intermediate_brute_force_search(dimension_dict, loaders_dict, device, lr=0.01, num_epochs=1, criterion=nn.L1Loss()):
+def intermediate_fusion_brute_force_search(dimension_dict, loaders_dict, device, lr=0.01, num_epochs=1, criterion=nn.L1Loss()):
     ub = 2
     num_solutions = sum(1 for data_type in loaders_dict.keys() for i in loaders_dict[data_type]) + 1
     combinations = 2 ** num_solutions
