@@ -12,9 +12,8 @@ To start this project, clone the repository and install the necessary dependenci
 ```
 
 ## Usage
-
-To load and preprocess the dataset execute **"Retina_images_dataset.py"** file and to execute all the fusion functions, calculate and compare the results execute **"main.py"** file.
-
+Firstly, the user should load and preprocess the whole dataset. Secondly, the person splits the data into the training and validation/test sets and creates dataloaders for each set. Finally, it is necessary to collect tuples of training and validation dataloaders in a dictionary in the following format: key - "name of the data type", value - tuple(s) with (training and validation dataloaders) of the corresponding data type. Additionally, the user should create a dictionary of input dimensions for each data type in the following format: key - "name of the data type", value - input dimension of the corresponding data type.
+After data loading and preprocessing, the person can send two dictionaries (1 - with data dataloaders and 2 - with input dimensions) as inputs to the **"main.py"** file and run it. **"main.py"** file executes all the fusion functions, then calculates and compares the results.
 
 ## Fusion Models
 
