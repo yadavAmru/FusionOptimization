@@ -7,7 +7,7 @@ import torch.optim as optim
 import numpy as np
 import pygad
 from early_fusion import MLP
-from intermediate_brute_force_search import NewMyEnsemble, new_train_intermediate
+from intermediate_fusion_brute_force_search import NewMyEnsemble, new_train_intermediate
 
 #-------------------------------------------Definition of functions---------------------------------------------------------
 def fitness_function_factory_GA(dimension_dict, loaders_dict, device, lr, num_epochs, criterion):
