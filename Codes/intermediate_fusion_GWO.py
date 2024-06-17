@@ -5,7 +5,7 @@ import torch.optim as optim
 import random
 import numpy
 from early_fusion import MLP
-from intermediate_brute_force_search import NewMyEnsemble, new_train_intermediate
+from intermediate_fusion_brute_force_search import NewMyEnsemble, new_train_intermediate
 
 #-------------------------------------------Definition of functions---------------------------------------------------------
 def GWO(objf, lb, ub, dim, SearchAgents_no, Max_iter):
