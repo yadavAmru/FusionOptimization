@@ -8,22 +8,37 @@ import numpy as np
 
 #-----------------------------------------------------Definition of functions-----------------------------------------------------
 class MLP(nn.Module):
-    def __init__(self, input_dim, fusion, n_layers = 5, output_dim=1):
+    def __init__(self, input_dim, fusion, n_layers=None, output_dim=1):
         super(MLP, self).__init__()
         self.input_dim = input_dim
         self.fusion = fusion
-        self.n_layers = n_layers
         self.output_dim = output_dim
-        in_nodes = input_dim
-        out_nodes = 64
-        layer_list = nn.ModuleList()
-        for i in range(n_layers):
-            layer_list.append(nn.Linear(in_nodes, out_nodes))
-            layer_list.append(nn.ReLU())
-            in_nodes = out_nodes
-            out_nodes = out_nodes//2
-        self.layers = nn.Sequential(*layer_list)
-        self.out_nodes = out_nodes*2
+        if n_layers == None:
+            layer_list = nn.ModuleList()
+            in_nodes = input_dim
+            if (input_dim // 2) % 2 != 0:
+                out_nodes = input_dim // 2 + 1
+                layer_list.append(nn.Linear(in_nodes, out_nodes))
+                layer_list.append(nn.ReLU())
+                in_nodes = out_nodes
+            else:
+                out_nodes = input_dim // 2
+            while out_nodes % 2 == 0 and (in_nodes // 2) != 1 and out_nodes != 0:
+                out_nodes = in_nodes//2
+                layer_list.append(nn.Linear(in_nodes, out_nodes))
+                layer_list.append(nn.ReLU())
+                in_nodes = out_nodes
+            self.layers = nn.Sequential(*layer_list)
+            self.out_nodes = out_nodes
+        else:
+            layer_list = nn.ModuleList()
+            nodes = np.linspace(input_dim, 1, num=n_layers + 2, dtype=int)
+            for idx in range(len(nodes) - 2):
+                nodes[idx], nodes[idx + 1]
+                layer_list.append(nn.Linear(nodes[idx], nodes[idx + 1]))
+                layer_list.append(nn.ReLU())
+            self.layers = nn.Sequential(*layer_list)
+            self.out_nodes = nodes[-2]
 
     def forward(self, x):
         x = x.view(-1, self.input_dim)
@@ -100,10 +115,10 @@ def early_fusion(dimension_dict, train_loader, val_loader, device, lr=0.01, num_
     input_dim = sum(list(dimension_dict.values()))
     model = MLP(input_dim=input_dim, fusion="early")
     optimizer = optim.Adam(model.parameters(), lr=lr)
-    #Training
+#Training
     model_path = 'best_early_fusion_model.pth'
     dict_log = train(model, optimizer, num_epochs, train_loader, val_loader, criterion, device, model_path)
-    #Results of early fusion
+#Results of early fusion
     checkpoint = torch.load('best_early_fusion_model.pth')
     loss = checkpoint['loss']
     return loss
