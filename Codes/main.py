@@ -2,7 +2,7 @@ import os
 os.environ['TF_ENABLE_ONEDNN_OPTS'] = '0'
 import torch
 import torch.nn as nn
-from Retina_images_dataset import dimension_dict, train_combined_loader, val_combined_loader, loaders_dict
+from Shopee_dataset import dimension_dict, loaders_dict, train_shopee_combined_loader, val_shopee_combined_loader #train_combined_loader, val_combined_loader
 from early_fusion import early_fusion
 from intermediate_brute_force_search import intermediate_brute_force_search
 from intermediate_fusion_GA import intermediate_fusion_GA
@@ -13,7 +13,7 @@ from late_fusion import late_fusion
 #---------------------------------------------------------------Fusion results------------------------------------------------------------------------
 if __name__ == "__main__":
     #Hyperparameters
-    num_epochs = 1
+    num_epochs = 10
     lr = 0.01
     criterion=nn.L1Loss()
     num_generations = 3 # The number of iterations in GA
@@ -25,7 +25,7 @@ if __name__ == "__main__":
     print("------------------------------------------------------------Training--------------------------------------------------------------------------")
     #Training fusion models
     print("-----------------------------------------------------Start of early fusion--------------------------------------------------------------------")
-    early_fusion_loss = early_fusion(dimension_dict, train_combined_loader, val_combined_loader, device, lr, num_epochs, criterion)
+    early_fusion_loss = early_fusion(dimension_dict, train_shopee_combined_loader, val_shopee_combined_loader, device, lr, num_epochs, criterion)
     print("-------------------------------------Start of intermediate fusion with brute-force search-----------------------------------------------------")
     intermediate_brute_force_loss, solution = intermediate_brute_force_search(dimension_dict, loaders_dict, device, lr, num_epochs, criterion)
     print("---------------------------------------------Start of intermediate fusion with GA-------------------------------------------------------------")
