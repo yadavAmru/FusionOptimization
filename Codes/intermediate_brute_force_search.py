@@ -4,6 +4,7 @@ import torch
 import torch.nn as nn
 import torch.optim as optim
 import numpy as np
+from numpy import binary_repr
 from early_fusion import MLP
 
 #-------------------------------------------Definition of functions---------------------------------------------------------
@@ -11,19 +12,37 @@ class NewMyEnsemble(nn.Module):
     def __init__(self, model_list, n_layers = 5, output_dim=1):
         super(NewMyEnsemble, self).__init__()
         self.model_list = model_list
-        self.n_layers = n_layers
-        in_nodes = 0
+        input_dim = 0
         for i in range(len(self.model_list)):
-            in_nodes += list(self.model_list[i].children())[0][-2].out_features
-        out_nodes = 64
-        layer_list = nn.ModuleList()
-        for i in range(n_layers):
-            layer_list.append(nn.Linear(in_nodes, out_nodes))
-            layer_list.append(nn.ReLU())
-            in_nodes = out_nodes
-            out_nodes = out_nodes//2
-        self.layers = nn.Sequential(*layer_list)
-        self.output_fc = nn.Linear(out_nodes*2, output_dim)
+            input_dim += list(self.model_list[i].children())[0][-2].out_features
+
+        if n_layers == None:
+            layer_list = nn.ModuleList()
+            in_nodes = input_dim
+            if (input_dim // 2) % 2 != 0:
+                out_nodes = input_dim // 2 + 1
+                layer_list.append(nn.Linear(in_nodes, out_nodes))
+                layer_list.append(nn.ReLU())
+                in_nodes = out_nodes
+            else:
+                out_nodes = input_dim // 2
+            while out_nodes % 2 == 0 and (in_nodes // 2) != 1 and out_nodes != 0:
+                out_nodes = in_nodes//2
+                layer_list.append(nn.Linear(in_nodes, out_nodes))
+                layer_list.append(nn.ReLU())
+                in_nodes = out_nodes
+            self.layers = nn.Sequential(*layer_list)
+            out_nodes = out_nodes
+        else:
+            layer_list = nn.ModuleList()
+            nodes = np.linspace(input_dim, 1, num=n_layers + 1, dtype=int)
+            for idx in range(len(nodes) - 2):
+                nodes[idx], nodes[idx + 1]
+                layer_list.append(nn.Linear(nodes[idx], nodes[idx + 1]))
+                layer_list.append(nn.ReLU())
+            self.layers = nn.Sequential(*layer_list)
+            out_nodes = nodes[-2]
+        self.output_fc = nn.Linear(out_nodes, output_dim)
 
     def forward(self, x_list):
         models = []
@@ -56,8 +75,8 @@ def new_validate_intermediate(model, val_loaders, criterion, device):
     model.eval()
     loss_step = []
     num_loaders = len(val_loaders)
-    for data in zip(*[val_loaders[i] for i in range(len(num_loaders))]):
-        inputs, labels =  [data[i][0][0].to(device) for i in range(len(val_loaders))], [data[i][1][0].to(device) for i in range(len(val_loaders))]
+    for data in zip(*[val_loaders[i] for i in range(num_loaders)]):
+        inputs, labels =  [data[i][0][0].to(device) for i in range(num_loaders)], [data[i][1][0].to(device) for i in range(num_loaders)]
         # inputs1, labels1, inputs2, labels2 = inputs1.double(), labels1, inputs2.double(), labels2
         outputs = model(inputs)
         val_loss = criterion(outputs, labels[0])
@@ -116,25 +135,29 @@ def calculate_loss(dimension_dict, loaders_dict, solution, device, lr, num_epoch
     optimizer = optim.Adam(model.parameters(), lr=lr)
     #Training
     model_path = 'best_intermediate_fusion_model.pth'
-    print("Combination of hidden layers: {}; # of output layers: {}".format(solution[0:-1], solution[-1]))
+    print("Combination of layers: {}".format(solution))
     dict_log = new_train_intermediate(model, optimizer, num_epochs, train_loaders, val_loaders, criterion, device, model_path)
     checkpoint = torch.load(model_path)
     loss = checkpoint['loss']
     return loss
 
 def intermediate_brute_force_search(dimension_dict, loaders_dict, device, lr=0.01, num_epochs=1, criterion=nn.L1Loss()):
-  best_loss = 1e8
-  num_solutions = sum(1 for data_type in loaders_dict.keys() for i in loaders_dict[data_type]) + 1
-  ub1, ub2, ub3, ub4, ub5, ub6, ub7 = 2*np.ones((num_solutions,), dtype=int)
-  for s1 in range(1, ub1):
-    for s2 in range(1, ub2):
-      for s3 in range(1, ub3):
-        for s4 in range(1, ub4):
-          for s5 in range(1, ub5):
-            for s6 in range(1, ub6):
-              for s7 in range(1, ub7):
-                solution = [s1, s2, s3, s4, s5, s6, s7]
-                loss = calculate_loss(dimension_dict, loaders_dict, solution, device, lr, num_epochs, criterion)
-                if loss < best_loss:
-                  best_loss = loss
-  return best_loss, solution
+    ub = 2
+    num_solutions = sum(1 for data_type in loaders_dict.keys() for i in loaders_dict[data_type]) + 1
+    combinations = 2 ** num_solutions
+    orig_sol = np.ones(num_solutions, dtype=int)
+    best_loss = 1e8
+    best_solution = orig_sol
+    best_combo = {'loss': best_loss, 'solution': best_solution}
+    for i in range(ub - 1):
+        for combination in range(combinations):
+            solution_arr = binary_repr(combination, width = len(binary_repr(combinations)) - 1)
+            solution_arr = list(solution_arr)
+            solution = orig_sol + [int(sol) for sol in solution_arr]
+            loss = calculate_loss(dimension_dict, loaders_dict, solution, device, lr, num_epochs, criterion)
+            if loss < best_loss:
+                best_loss = loss
+                best_combo['loss'] = best_loss
+                best_combo['solution'] = solution
+        orig_sol = orig_sol + np.ones(num_solutions, dtype=int)
+    return best_combo['loss'], best_combo['solution']
