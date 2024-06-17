@@ -133,6 +133,6 @@ def fitness_function_factory_GWO(dimension_dict, loaders_dict, device, lr, num_e
 def intermediate_fusion_GWO(dimension_dict, loaders_dict, device, lr, num_epochs, Max_iter, SearchAgents_no, criterion):
     fitness_func_GWO = fitness_function_factory_GWO(dimension_dict, loaders_dict, device, lr, num_epochs, criterion)
     dim = sum(1 for data_type in loaders_dict.keys() for i in loaders_dict[data_type]) + 1         # Search range of wolf
-    lb, ub = 1, 5       # Lower and upper bounds
+    lb, ub = 1, 10       # Lower and upper bounds
     solution, solution_fitness = GWO(fitness_func_GWO, lb, ub, dim, SearchAgents_no, Max_iter)
     return numpy.around(solution).astype(int), solution_fitness
