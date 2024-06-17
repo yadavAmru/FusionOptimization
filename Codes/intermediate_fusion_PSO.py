@@ -8,7 +8,7 @@ import copy    # array-copying convenience
 import sys     # max float
 import numpy.random as rnd
 from early_fusion import MLP
-from intermediate_brute_force_search import NewMyEnsemble, new_train_intermediate
+from intermediate_fusion_brute_force_search import NewMyEnsemble, new_train_intermediate
 
 #-------------------------------------------Definition of functions---------------------------------------------------------
 # Define the PSO algorithm
