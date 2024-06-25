@@ -9,6 +9,7 @@ from intermediate_fusion_GA import intermediate_fusion_GA
 from intermediate_fusion_GWO import intermediate_fusion_GWO
 from intermediate_fusion_PSO import intermediate_fusion_PSO
 from intermediate_fusion_SMA import intermediate_fusion_SMA
+from intermediate_fusion_SAA import intermediate_fusion_SAA
 from late_fusion import late_fusion
 
 #---------------------------------------------------------------Fusion results------------------------------------------------------------------------
@@ -37,6 +38,8 @@ if __name__ == "__main__":
     solution_PSO, intermediate_fusion_loss_PSO = intermediate_fusion_PSO(dimension_dict, loaders_dict, device, lr, num_epochs, max_iter, num_particles, criterion)
     print("---------------------------------------------Start of intermediate fusion with SMA------------------------------------------------------------")
     solution_SMA, intermediate_fusion_loss_SMA = intermediate_fusion_SMA(dimension_dict, loaders_dict, device, lr, num_epochs, max_iter, SearchAgents_no, criterion)
+    print("---------------------------------------------Start of intermediate fusion with SAA------------------------------------------------------------")
+    solution_SAA, intermediate_fusion_loss_SAA = intermediate_fusion_SAA(dimension_dict, loaders_dict, device, lr, num_epochs, max_iter, criterion)
     print("-----------------------------------------------------Start of late fusion---------------------------------------------------------------------")
     late_fusion_loss = late_fusion(dimension_dict, loaders_dict, device, lr, num_epochs, criterion)
     print("------------------------------------------------------------Results---------------------------------------------------------------------------")
@@ -46,5 +49,6 @@ if __name__ == "__main__":
     print("Intermediate fusion loss (GWO optimization): {:.5f} \t Best combination of NN layers: {}".format(intermediate_fusion_loss_GWO, solution_GWO))
     print("Intermediate fusion loss (PSO optimization): {:.5f} \t Best combination of NN layers: {}".format(intermediate_fusion_loss_PSO, solution_PSO))
     print("Intermediate fusion loss (SMA optimization): {:.5f} \t Best combination of NN layers: {}".format(intermediate_fusion_loss_SMA, solution_SMA))
+    print("Intermediate fusion loss (SAA optimization): {:.5f} \t Best combination of NN layers: {}".format(intermediate_fusion_loss_SAA, solution_SAA))
     print("Late fusion loss: {:.5f}".format(late_fusion_loss))
     print("----------------------------------------------------------------------------------------------------------------------------------------------")
