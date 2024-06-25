@@ -92,4 +92,4 @@ def intermediate_fusion_SAA(dimension_dict, loaders_dict, device, lr, num_epochs
     initial_temp = 100.0   #Initial temperature
     cooling_rate = 0.95    # Cooling rate
     solution, solution_fitness = SAA(fitness_func_SAA, initial_solution, lb, ub, max_iter, initial_temp, cooling_rate)
-    return numpy.around(solution).astype(int), solution_fitness
+    return np.around(solution).astype(int), solution_fitness
