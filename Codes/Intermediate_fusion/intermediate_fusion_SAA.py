@@ -25,7 +25,7 @@ def SAA(objf, initial_solution, lb, ub, max_iter, initial_temp, cooling_rate):
 
     for iter in range(max_iter):
         # Generate a new candidate solution by perturbing the current solution
-        new_solution = current_solution + np.random.uniform(-1, 1, size=initial_solution.shape)
+        new_solution = current_solution + np.random.uniform(-1.5, 1.5, size=initial_solution.shape)  #we can change the limits of stepsize (-1.5, 1.5)
 
         # Ensure the new solution is within the bounds
         new_solution = np.clip(new_solution, lb, ub)
