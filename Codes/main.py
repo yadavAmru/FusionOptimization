@@ -10,6 +10,7 @@ from intermediate_fusion_GWO import intermediate_fusion_GWO
 from intermediate_fusion_PSO import intermediate_fusion_PSO
 from intermediate_fusion_SMA import intermediate_fusion_SMA
 from intermediate_fusion_SAA import intermediate_fusion_SAA
+from intermediate_fusion_SHC import intermediate_fusion_SHC
 from late_fusion import late_fusion
 
 #---------------------------------------------------------------Fusion results------------------------------------------------------------------------
@@ -22,7 +23,7 @@ if __name__ == "__main__":
     Max_iter = 3 # The number of iterations in GWO
     SearchAgents_no = 3 # Number of wolves seeking value in GWO
     num_particles = 3 # The number of particles in PSO
-    max_iter = 3 # The number of iterations in PSO
+    max_iter = 3 # The number of iterations in PSO, SAA, SMA, SHC
     device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
     print("------------------------------------------------------------Training--------------------------------------------------------------------------")
     #Training fusion models
@@ -40,6 +41,8 @@ if __name__ == "__main__":
     solution_SMA, intermediate_fusion_loss_SMA = intermediate_fusion_SMA(dimension_dict, loaders_dict, device, lr, num_epochs, max_iter, SearchAgents_no, criterion)
     print("---------------------------------------------Start of intermediate fusion with SAA------------------------------------------------------------")
     solution_SAA, intermediate_fusion_loss_SAA = intermediate_fusion_SAA(dimension_dict, loaders_dict, device, lr, num_epochs, max_iter, criterion)
+     print("---------------------------------------------Start of intermediate fusion with SHC------------------------------------------------------------")
+    solution_SHC, intermediate_fusion_loss_SHC = intermediate_fusion_SHC(dimension_dict, loaders_dict, device, lr, num_epochs, max_iter, criterion)
     print("-----------------------------------------------------Start of late fusion---------------------------------------------------------------------")
     late_fusion_loss = late_fusion(dimension_dict, loaders_dict, device, lr, num_epochs, criterion)
     print("------------------------------------------------------------Results---------------------------------------------------------------------------")
@@ -50,5 +53,6 @@ if __name__ == "__main__":
     print("Intermediate fusion loss (PSO optimization): {:.5f} \t Best combination of NN layers: {}".format(intermediate_fusion_loss_PSO, solution_PSO))
     print("Intermediate fusion loss (SMA optimization): {:.5f} \t Best combination of NN layers: {}".format(intermediate_fusion_loss_SMA, solution_SMA))
     print("Intermediate fusion loss (SAA optimization): {:.5f} \t Best combination of NN layers: {}".format(intermediate_fusion_loss_SAA, solution_SAA))
+    print("Intermediate fusion loss (SHC optimization): {:.5f} \t Best combination of NN layers: {}".format(intermediate_fusion_loss_SHC, solution_SHC))
     print("Late fusion loss: {:.5f}".format(late_fusion_loss))
     print("----------------------------------------------------------------------------------------------------------------------------------------------")
