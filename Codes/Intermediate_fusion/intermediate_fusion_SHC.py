@@ -12,6 +12,7 @@ from intermediate_fusion_brute_force_search import NewMyEnsemble, new_train_inte
 #-------------------------------------------Definition of functions---------------------------------------------------------
 #Simple Hill Climbing
 def generate_neighbors(solution, step_size=0.1):
+    #Generate neighboring solutions by slightly modifying each dimension of the current solution.
     neighbors = []
     for i in range(len(solution)):
         neighbor = solution.copy()
@@ -20,24 +21,31 @@ def generate_neighbors(solution, step_size=0.1):
     return neighbors
 
 def SHC(objf, lb, ub, dim, max_iter, step_size=0.1):
+    # Initialize the current solution randomly within the bounds
     current_solution = np.random.uniform(lb, ub, size=dim)
+    # Evaluate the fitness of the current solution
     current_fitness = objf(current_solution)
 
     for i in range(max_iter):
+        # Generate neighboring solutions
         neighbors = generate_neighbors(current_solution, step_size)
-        best_neighbor = None
-        best_fitness = current_fitness
+        best_neighbor = None    # To store the best neighbor found
+        best_fitness = current_fitness     # Initialize best fitness with current fitness
 
+        # Evaluate each neighbor's fitness
         for neighbor in neighbors:
             fitness = objf(neighbor)
+            # If the neighbor's fitness is better, update the best neighbor and best fitness
             if fitness < best_fitness:
                 best_neighbor = neighbor
                 best_fitness = fitness
-
+                
+        # If the best neighbor found is better than the current solution, update the current solution and fitness
         if best_fitness < current_fitness:
             current_solution = best_neighbor
             current_fitness = best_fitness
-
+            
+    # Return the best solution found and its fitness value
     return current_solution, current_fitness
 
 def fitness_function_factory_SHC(dimension_dict, loaders_dict, device, lr, num_epochs, criterion):
