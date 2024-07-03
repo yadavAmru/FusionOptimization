@@ -41,7 +41,7 @@ if __name__ == "__main__":
     solution_SMA, intermediate_fusion_loss_SMA = intermediate_fusion_SMA(dimension_dict, loaders_dict, device, lr, num_epochs, max_iter, SearchAgents_no, criterion)
     print("---------------------------------------------Start of intermediate fusion with SAA------------------------------------------------------------")
     solution_SAA, intermediate_fusion_loss_SAA = intermediate_fusion_SAA(dimension_dict, loaders_dict, device, lr, num_epochs, max_iter, criterion)
-     print("---------------------------------------------Start of intermediate fusion with SHC------------------------------------------------------------")
+    print("---------------------------------------------Start of intermediate fusion with SHC------------------------------------------------------------")
     solution_SHC, intermediate_fusion_loss_SHC = intermediate_fusion_SHC(dimension_dict, loaders_dict, device, lr, num_epochs, max_iter, criterion)
     print("-----------------------------------------------------Start of late fusion---------------------------------------------------------------------")
     late_fusion_loss = late_fusion(dimension_dict, loaders_dict, device, lr, num_epochs, criterion)
