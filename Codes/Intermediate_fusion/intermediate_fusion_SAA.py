@@ -6,8 +6,8 @@ import random
 import numpy as np
 import torch.nn as nn
 import copy
-from early_fusion import MLP
-from intermediate_fusion_brute_force_search import NewMyEnsemble, new_train_intermediate
+from intermediate_fusion_brute_force_search import new_train_intermediate, new_validate_intermediate
+from intermediate_fusion_brute_force_search import get_fusion_model_and_dataloaders, load_model
 
 #-------------------------------------------Definition of functions---------------------------------------------------------
 #Simulated Annealing Algorithm
@@ -25,7 +25,7 @@ def SAA(objf, initial_solution, lb, ub, max_iter, initial_temp, cooling_rate):
 
     for iter in range(max_iter):
         # Generate a new candidate solution by perturbing the current solution
-        new_solution = current_solution + np.random.uniform(-1.5, 1.5, size=initial_solution.shape)  #we can change the limits of stepsize (-1.5, 1.5)
+        new_solution = current_solution + np.random.uniform(-1.0, 1.0, size=initial_solution.shape)
 
         # Ensure the new solution is within the bounds
         new_solution = np.clip(new_solution, lb, ub)
@@ -45,36 +45,29 @@ def SAA(objf, initial_solution, lb, ub, max_iter, initial_temp, cooling_rate):
             if new_value < best_value:
                 best_solution = copy.deepcopy(new_solution)
                 best_value = new_value
+                # final_checkpoint = torch.load('temp_SAA_best_model_min_val_loss.pth')
+                # torch.save({'model_state_dict': final_checkpoint['model_state_dict']}, 'SAA_best_model.pth')
 
         # Cool down the temperature
         temp *= cooling_rate
+
+    best_model_save = objf(best_solution)
+    final_checkpoint = torch.load('temp_SAA_best_model_min_val_loss.pth')
+    torch.save({'model_state_dict': final_checkpoint['model_state_dict']}, 'SAA_best_model.pth')
 
     return best_solution, best_value
 
 
 def fitness_function_factory_SAA(dimension_dict, loaders_dict, device, lr, num_epochs, criterion):
     def calculate_loss(dimension_dict, loaders_dict, solution, device, lr, num_epochs, criterion):
-        train_loaders, val_loaders = [], []
-        models = []
-        index = 0
-        for data_type in loaders_dict.keys():
-            train_loaders_per_type, val_loaders_per_type = [], []
-            for i, (train_loader, val_loader) in enumerate(loaders_dict[data_type]):
-                train_loaders_per_type.append(train_loader)
-                val_loaders_per_type.append(val_loader)
-                input_dim = dimension_dict[data_type]
-                model = MLP(input_dim=input_dim, n_layers=round(solution[index]), fusion="intermediate")
-                models.append(model)
-                index += 1
-            train_loaders.extend(train_loaders_per_type)
-            val_loaders.extend(val_loaders_per_type)
-        model = NewMyEnsemble(models, n_layers=round(solution[index]))
+        #create intermediate fusion head for fused MLP models
+        model, train_loaders, val_loaders, _ = get_fusion_model_and_dataloaders(dimension_dict, loaders_dict, solution)
         optimizer = optim.Adam(model.parameters(), lr=lr)
-        #Training
-        model_path = 'SAA_best_model_min_val_loss.pth'
+        model_path = 'temp_SAA_best_model_min_val_loss.pth'
+        #train and validate fused MLP models with fusion head
         dict_log = new_train_intermediate(model, optimizer, num_epochs, train_loaders, val_loaders, criterion, device, model_path)
         checkpoint = torch.load(model_path)
-        loss = checkpoint['loss']
+        loss = checkpoint['loss']                                               #Validation results of intermediate_fusion_SAA
         return loss
 
     def fitness_func_SAA(solution):
@@ -85,11 +78,16 @@ def fitness_function_factory_SAA(dimension_dict, loaders_dict, device, lr, num_e
 #------------------------------------------------- SAA optimization----------------------------------------------------------
 def intermediate_fusion_SAA(dimension_dict, loaders_dict, device, lr, num_epochs, max_iter, criterion):
     fitness_func_SAA = fitness_function_factory_SAA(dimension_dict, loaders_dict, device, lr, num_epochs, criterion)
-    dim = sum(1 for data_type in loaders_dict.keys() for i in loaders_dict[data_type]) + 1         # Number of solutions
-    lb = np.array([1] * dim)  # Lower bounds for the dimensions
-    ub = np.array([10] * dim)  # Upper bounds for the dimensions
-    initial_solution = np.array([5] * dim)  # Initial solution (starting point)
-    initial_temp = 100.0   #Initial temperature
-    cooling_rate = 0.95    # Cooling rate
-    solution, solution_fitness = SAA(fitness_func_SAA, initial_solution, lb, ub, max_iter, initial_temp, cooling_rate)
-    return np.around(solution).astype(int), solution_fitness
+    # Calculate number of fused MLP models + fusion head where to optimize the number of NN layers
+    dim = sum(1 for data_type in dimension_dict.keys() for i in loaders_dict["train"][data_type]) + 1
+    lb = np.array([1] * dim)                                                    # Lower bounds for the number of layers
+    ub = np.array([10] * dim)                                                   # Upper bounds for the number of layers
+    initial_solution = np.array([5] * dim)                                      # Initial solution (starting point)
+    initial_temp = 100.0                                                        # Initial temperature
+    cooling_rate = 0.95                                                         # Cooling rate
+    best_solution, solution_fitness = SAA(fitness_func_SAA, initial_solution, lb, ub, max_iter, initial_temp, cooling_rate)   # return the best combination of NN layers and its loss
+    os.remove('temp_SAA_best_model_min_val_loss.pth')
+    model, _, _, test_loaders = get_fusion_model_and_dataloaders(dimension_dict, loaders_dict, np.around(best_solution))
+    test_model = load_model(model, 'SAA_best_model.pth')
+    test_loss = new_validate_intermediate(test_model, test_loaders, criterion, device)     #test model with the best combination of layers
+    return np.around(best_solution).astype(int), test_loss
