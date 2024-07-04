@@ -4,8 +4,8 @@ import torch
 import torch.optim as optim
 import random
 import numpy
-from early_fusion import MLP
-from intermediate_fusion_brute_force_search import NewMyEnsemble, new_train_intermediate
+from intermediate_fusion_brute_force_search import new_train_intermediate, new_validate_intermediate
+from intermediate_fusion_brute_force_search import get_fusion_model_and_dataloaders, load_model
 
 #-------------------------------------------Definition of functions---------------------------------------------------------
 def GWO(objf, lb, ub, dim, SearchAgents_no, Max_iter):
@@ -42,12 +42,13 @@ def GWO(objf, lb, ub, dim, SearchAgents_no, Max_iter):
 
             #=== Calculate the objective function of each search agent ==========
             fitness = objf(Positions[i, :])  #  Bring a row of data into function calculation
-            # print(" After calculation ：",fitness)
 
             #==== to update  Alpha, Beta, and Delta================
             if fitness < Alpha_score:
                 Alpha_score = fitness  # Update alpha
                 Alpha_pos = Positions[i, :].copy()
+                # final_checkpoint = torch.load('temp_GWO_best_model_min_val_loss.pth')
+                # torch.save({'model_state_dict': final_checkpoint['model_state_dict']}, 'GWO_best_model.pth')
 
             if (fitness > Alpha_score and fitness < Beta_score):
                 Beta_score = fitness  # Update beta
@@ -96,32 +97,24 @@ def GWO(objf, lb, ub, dim, SearchAgents_no, Max_iter):
 
         if (l % 1 == 0):
             print([' The number of iterations is ' + str(l) + '  Iterative results of ' + str(Alpha_score)]);  #  Results of each iteration
-    print("The best optimal value of the objective funciton found by GWO is: {:.5f} \t Best solution: {}".format(Alpha_score, numpy.around(Alpha_pos).astype(int)))
+    print("The best optimal value of the objective funciton found by GWO is: {:.5f} \t Best solution: {}".format(Alpha_score, np.around(Alpha_pos).astype(int)))
+
+    best_model_save = objf(Alpha_pos)
+    final_checkpoint = torch.load('temp_GWO_best_model_min_val_loss.pth')
+    torch.save({'model_state_dict': final_checkpoint['model_state_dict']}, 'GWO_best_model.pth')
+
     return Alpha_pos, Alpha_score
 
 def fitness_function_factory_GWO(dimension_dict, loaders_dict, device, lr, num_epochs, criterion):
     def calculate_loss(dimension_dict, loaders_dict, solution, device, lr, num_epochs, criterion):
-        train_loaders, val_loaders = [], []
-        models = []
-        index = 0
-        for data_type in loaders_dict.keys():
-            train_loaders_per_type, val_loaders_per_type = [], []
-            for i, (train_loader, val_loader) in enumerate(loaders_dict[data_type]):
-                train_loaders_per_type.append(train_loader)
-                val_loaders_per_type.append(val_loader)
-                input_dim = dimension_dict[data_type]
-                model = MLP(input_dim=input_dim, n_layers=round(solution[index]), fusion="intermediate")
-                models.append(model)
-                index += 1
-            train_loaders.extend(train_loaders_per_type)
-            val_loaders.extend(val_loaders_per_type)
-        model = NewMyEnsemble(models, n_layers=round(solution[index]))
+        #create intermediate fusion head for fused MLP models
+        model, train_loaders, val_loaders, _ = get_fusion_model_and_dataloaders(dimension_dict, loaders_dict, solution)
         optimizer = optim.Adam(model.parameters(), lr=lr)
-        #Training
-        model_path = 'GWO_best_model_min_val_loss.pth'
+        model_path = 'temp_GWO_best_model_min_val_loss.pth'
+        #train and validate fused MLP models with fusion head
         dict_log = new_train_intermediate(model, optimizer, num_epochs, train_loaders, val_loaders, criterion, device, model_path)
         checkpoint = torch.load(model_path)
-        loss = checkpoint['loss']
+        loss = checkpoint['loss']                                               #Validation results of intermediate_fusion_GWO
         return loss
 
     def fitness_func_GWO(solution):
@@ -132,7 +125,14 @@ def fitness_function_factory_GWO(dimension_dict, loaders_dict, device, lr, num_e
 #------------------------------------------------- GWO optimization----------------------------------------------------------
 def intermediate_fusion_GWO(dimension_dict, loaders_dict, device, lr, num_epochs, Max_iter, SearchAgents_no, criterion):
     fitness_func_GWO = fitness_function_factory_GWO(dimension_dict, loaders_dict, device, lr, num_epochs, criterion)
-    dim = sum(1 for data_type in loaders_dict.keys() for i in loaders_dict[data_type]) + 1         # Search range of wolf
-    lb, ub = 1, 10       # Lower and upper bounds
-    solution, solution_fitness = GWO(fitness_func_GWO, lb, ub, dim, SearchAgents_no, Max_iter)
-    return numpy.around(solution).astype(int), solution_fitness
+    # Calculate number of fused MLP models + fusion head where to optimize the number of NN layers
+    dim = sum(1 for data_type in dimension_dict.keys() for i in loaders_dict["train"][data_type]) + 1
+    # Lower and upper bounds of number of layers
+    lb, ub = 1, 10
+    # return the best combination of NN layers and its loss
+    best_solution, solution_fitness = GWO(fitness_func_GWO, lb, ub, dim, SearchAgents_no, Max_iter)
+    os.remove('temp_GWO_best_model_min_val_loss.pth')
+    model, _, _, test_loaders = get_fusion_model_and_dataloaders(dimension_dict, loaders_dict, np.around(best_solution))
+    test_model = load_model(model, 'GWO_best_model.pth')
+    test_loss = new_validate_intermediate(test_model, test_loaders, criterion, device)       #test model with the best combination of layers
+    return np.around(best_solution).astype(int), test_loss
