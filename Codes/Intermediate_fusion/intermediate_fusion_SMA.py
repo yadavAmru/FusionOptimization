@@ -24,6 +24,11 @@ def SMA(objf, lb, ub, dim, SearchAgents_no, Max_iter):
         sorted_indices = np.argsort(fitness_value)
         positions = positions[sorted_indices]
 
+        # Update the best position and best score
+        if fitness_value[sorted_indices[0]] < Best_score:
+            Best_score = fitness_value[sorted_indices[0]]
+            Best_pos = positions[0]
+
         # Update the weights
         w = w * np.exp(-i / Max_iter)
 
@@ -31,7 +36,6 @@ def SMA(objf, lb, ub, dim, SearchAgents_no, Max_iter):
         for j in range(SearchAgents_no):
             if random.random() < w:
                 # Approach food (exploitation)
-                Best_pos = positions[0]
                 positions[j] = positions[j] + np.random.rand() * (Best_pos - positions[j])
             else:
                 # Explore randomly
@@ -46,8 +50,6 @@ def SMA(objf, lb, ub, dim, SearchAgents_no, Max_iter):
             positions[j] = np.clip(positions[j], lb, ub)
 
       # Get the best solution
-    Best_pos = positions[0]
-    Best_score = objf(Best_pos)
     final_checkpoint = torch.load('temp_SMA_best_model_min_val_loss.pth')
     torch.save({'model_state_dict': final_checkpoint['model_state_dict']}, 'SMA_best_model.pth')
 
