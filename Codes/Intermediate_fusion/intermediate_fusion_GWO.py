@@ -3,7 +3,7 @@ os.environ['TF_ENABLE_ONEDNN_OPTS'] = '0'
 import torch
 import torch.optim as optim
 import random
-import numpy
+import numpy as np
 from intermediate_fusion_brute_force_search import new_train_intermediate, new_validate_intermediate
 from intermediate_fusion_brute_force_search import get_fusion_model_and_dataloaders, load_model
 
@@ -11,13 +11,13 @@ from intermediate_fusion_brute_force_search import get_fusion_model_and_dataload
 def GWO(objf, lb, ub, dim, SearchAgents_no, Max_iter):
 
     #=== initialization  alpha, beta, and delta_pos=======
-    Alpha_pos = numpy.zeros(dim)  #  Location . formation 30 A list of
+    Alpha_pos = np.zeros(dim)  #  Location . formation 30 A list of
     Alpha_score = float("inf")  #  This means “ Plus or minus infinity ”, All the numbers are equal to  +inf  Small ; It's just infinite ：float("inf");  Negative infinity ：float("-inf")
 
-    Beta_pos = numpy.zeros(dim)
+    Beta_pos = np.zeros(dim)
     Beta_score = float("inf")
 
-    Delta_pos = numpy.zeros(dim)
+    Delta_pos = np.zeros(dim)
     Delta_score = float("inf")  # float()  Function to convert integers and strings to floating-point numbers .
 
     #====list List the type =============
@@ -27,18 +27,18 @@ def GWO(objf, lb, ub, dim, SearchAgents_no, Max_iter):
         ub = [ub] * dim
 
     #======== Initialize the location of all wolves ===================
-    Positions = numpy.zeros((SearchAgents_no, dim))
+    Positions = np.zeros((SearchAgents_no, dim))
     for i in range(dim):  #  formation 5*30 Number [-100,100) within
-        Positions[:, i] = numpy.random.uniform(0, 1, SearchAgents_no) * (ub[i] - lb[i]) + lb[
+        Positions[:, i] = np.random.uniform(0, 1, SearchAgents_no) * (ub[i] - lb[i]) + lb[
             i]  #  formation [5 individual 0-1 Number of numbers ]*100-（-100）-100
-    Convergence_curve = numpy.zeros(Max_iter)
+    Convergence_curve = np.zeros(Max_iter)
 
     #======== Iterative optimization =====================
     for l in range(0, Max_iter):  #  iteration 1000
         for i in range(0, SearchAgents_no):  # 5
             #==== Returns the search agent that exceeds the boundary of the search space ====
             for j in range(dim):  # 30
-                Positions[i, j] = numpy.clip(Positions[i, j], lb[j], ub[j])  # clip This function limits the elements in the array to a_min(-100), a_max(100) Between , Greater than a_max That makes it equal to  a_max, Less than a_min, That makes it equal to a_min.
+                Positions[i, j] = np.clip(Positions[i, j], lb[j], ub[j])  # clip This function limits the elements in the array to a_min(-100), a_max(100) Between , Greater than a_max That makes it equal to  a_max, Less than a_min, That makes it equal to a_min.
 
             #=== Calculate the objective function of each search agent ==========
             fitness = objf(Positions[i, :])  #  Bring a row of data into function calculation
@@ -105,10 +105,10 @@ def GWO(objf, lb, ub, dim, SearchAgents_no, Max_iter):
 
     return Alpha_pos, Alpha_score
 
-def fitness_function_factory_GWO(dimension_dict, loaders_dict, device, lr, num_epochs, criterion):
-    def calculate_loss(dimension_dict, loaders_dict, solution, device, lr, num_epochs, criterion):
+def fitness_function_factory_GWO(dimension_dict, loaders_dict, device, lr, num_epochs, mode, criterion):
+    def calculate_loss(dimension_dict, loaders_dict, solution, device, lr, num_epochs, mode, criterion):
         #create intermediate fusion head for fused MLP models
-        model, train_loaders, val_loaders, _ = get_fusion_model_and_dataloaders(dimension_dict, loaders_dict, solution)
+        model, train_loaders, val_loaders, _ = get_fusion_model_and_dataloaders(dimension_dict, loaders_dict, solution, mode, device)
         optimizer = optim.Adam(model.parameters(), lr=lr)
         model_path = 'temp_GWO_best_model_min_val_loss.pth'
         #train and validate fused MLP models with fusion head
@@ -118,21 +118,21 @@ def fitness_function_factory_GWO(dimension_dict, loaders_dict, device, lr, num_e
         return loss
 
     def fitness_func_GWO(solution):
-        solution_fitness = calculate_loss(dimension_dict, loaders_dict, solution, device, lr, num_epochs, criterion)
+        solution_fitness = calculate_loss(dimension_dict, loaders_dict, solution, device, lr, num_epochs, mode, criterion)
         return solution_fitness
     return fitness_func_GWO
 
 #------------------------------------------------- GWO optimization----------------------------------------------------------
-def intermediate_fusion_GWO(dimension_dict, loaders_dict, device, lr, num_epochs, Max_iter, SearchAgents_no, criterion):
-    fitness_func_GWO = fitness_function_factory_GWO(dimension_dict, loaders_dict, device, lr, num_epochs, criterion)
+def intermediate_fusion_GWO(dimension_dict, loaders_dict, device, ub, lr, num_epochs, Max_iter, SearchAgents_no, mode, criterion):
+    fitness_func_GWO = fitness_function_factory_GWO(dimension_dict, loaders_dict, device, lr, num_epochs, mode, criterion)
     # Calculate number of fused MLP models + fusion head where to optimize the number of NN layers
     dim = sum(1 for data_type in dimension_dict.keys() for i in loaders_dict["train"][data_type]) + 1
     # Lower and upper bounds of number of layers
-    lb, ub = 1, 10
+    lb, ub = 1, ub
     # return the best combination of NN layers and its loss
     best_solution, solution_fitness = GWO(fitness_func_GWO, lb, ub, dim, SearchAgents_no, Max_iter)
     os.remove('temp_GWO_best_model_min_val_loss.pth')
-    model, _, _, test_loaders = get_fusion_model_and_dataloaders(dimension_dict, loaders_dict, np.around(best_solution))
+    model, _, _, test_loaders = get_fusion_model_and_dataloaders(dimension_dict, loaders_dict, np.around(best_solution), mode, device)
     test_model = load_model(model, 'GWO_best_model.pth')
     test_loss = new_validate_intermediate(test_model, test_loaders, criterion, device)       #test model with the best combination of layers
     return np.around(best_solution).astype(int), test_loss
