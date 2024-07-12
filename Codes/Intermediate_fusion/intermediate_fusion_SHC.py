@@ -45,10 +45,10 @@ def SHC(objf, lb, ub, dim, max_iter, step_size=0.1):
     return current_solution, current_fitness
 
 
-def fitness_function_factory_SHC(dimension_dict, loaders_dict, device, lr, num_epochs, criterion):
-    def calculate_loss(dimension_dict, loaders_dict, solution, device, lr, num_epochs, criterion):
+def fitness_function_factory_SHC(dimension_dict, loaders_dict, device, lr, num_epochs, mode, criterion):
+    def calculate_loss(dimension_dict, loaders_dict, solution, device, lr, num_epochs, mode, criterion):
         #create intermediate fusion head for fused MLP models
-        model, train_loaders, val_loaders, _ = get_fusion_model_and_dataloaders(dimension_dict, loaders_dict, solution)
+        model, train_loaders, val_loaders, _ = get_fusion_model_and_dataloaders(dimension_dict, loaders_dict, solution, mode, device)
         optimizer = optim.Adam(model.parameters(), lr=lr)
         model_path = 'temp_SHC_best_model_min_val_loss.pth'
         #train and validate fused MLP models with fusion head
@@ -58,21 +58,21 @@ def fitness_function_factory_SHC(dimension_dict, loaders_dict, device, lr, num_e
         return loss
 
     def fitness_func_SHC(solution):
-        solution_fitness = calculate_loss(dimension_dict, loaders_dict, solution, device, lr, num_epochs, criterion)
+        solution_fitness = calculate_loss(dimension_dict, loaders_dict, solution, device, lr, num_epochs, mode, criterion)
         return solution_fitness
     return fitness_func_SHC
 
 #------------------------------------------------- SHC optimization----------------------------------------------------------
-def intermediate_fusion_SHC(dimension_dict, loaders_dict, device, lr, num_epochs, max_iter, criterion):
-    fitness_func_SHC = fitness_function_factory_SHC(dimension_dict, loaders_dict, device, lr, num_epochs, criterion)
+def intermediate_fusion_SHC(dimension_dict, loaders_dict, device, ub, lr, num_epochs, max_iter, mode, criterion):
+    fitness_func_SHC = fitness_function_factory_SHC(dimension_dict, loaders_dict, device, lr, num_epochs, mode, criterion)
     # Calculate number of fused MLP models + fusion head where to optimize the number of NN layers
     dim = sum(1 for data_type in dimension_dict.keys() for i in loaders_dict["train"][data_type]) + 1         # Number of solutions
-    lb, ub = 1, 10                                                                                            #  Lower and upper bound of the search space
+    lb, ub = 1, ub                                                                                            #  Lower and upper bound of the search space
     step_size = 0.5                                                                                           # Step size for the search space
 
     best_solution, solution_fitness = SHC(fitness_func_SHC, lb, ub, dim, max_iter, step_size)  # return the best combination of NN layers and its loss
     os.remove('temp_SHC_best_model_min_val_loss.pth')
-    model, _, _, test_loaders = get_fusion_model_and_dataloaders(dimension_dict, loaders_dict, np.around(best_solution))
+    model, _, _, test_loaders = get_fusion_model_and_dataloaders(dimension_dict, loaders_dict, np.around(best_solution), mode, device)
     test_model = load_model(model, 'SHC_best_model.pth')
     test_loss = new_validate_intermediate(test_model, test_loaders, criterion, device)        #test model with the best combination of layers
     return np.around(best_solution).astype(int), test_loss
