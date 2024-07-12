@@ -25,7 +25,7 @@ def SAA(objf, initial_solution, lb, ub, max_iter, initial_temp, cooling_rate):
 
     for iter in range(max_iter):
         # Generate a new candidate solution by perturbing the current solution
-        new_solution = current_solution + np.random.uniform(-1.0, 1.0, size=initial_solution.shape)
+        new_solution = current_solution + np.random.uniform(-1.5, 1.5, size=initial_solution.shape)
 
         # Ensure the new solution is within the bounds
         new_solution = np.clip(new_solution, lb, ub)
@@ -58,10 +58,10 @@ def SAA(objf, initial_solution, lb, ub, max_iter, initial_temp, cooling_rate):
     return best_solution, best_value
 
 
-def fitness_function_factory_SAA(dimension_dict, loaders_dict, device, lr, num_epochs, criterion):
-    def calculate_loss(dimension_dict, loaders_dict, solution, device, lr, num_epochs, criterion):
+def fitness_function_factory_SAA(dimension_dict, loaders_dict, device, lr, num_epochs, mode, criterion):
+    def calculate_loss(dimension_dict, loaders_dict, solution, device, lr, num_epochs, mode, criterion):
         #create intermediate fusion head for fused MLP models
-        model, train_loaders, val_loaders, _ = get_fusion_model_and_dataloaders(dimension_dict, loaders_dict, solution)
+        model, train_loaders, val_loaders, _ = get_fusion_model_and_dataloaders(dimension_dict, loaders_dict, solution, mode, device)
         optimizer = optim.Adam(model.parameters(), lr=lr)
         model_path = 'temp_SAA_best_model_min_val_loss.pth'
         #train and validate fused MLP models with fusion head
@@ -71,23 +71,23 @@ def fitness_function_factory_SAA(dimension_dict, loaders_dict, device, lr, num_e
         return loss
 
     def fitness_func_SAA(solution):
-        solution_fitness = calculate_loss(dimension_dict, loaders_dict, solution, device, lr, num_epochs, criterion)
+        solution_fitness = calculate_loss(dimension_dict, loaders_dict, solution, device, lr, num_epochs, mode, criterion)
         return solution_fitness
     return fitness_func_SAA
 
 #------------------------------------------------- SAA optimization----------------------------------------------------------
-def intermediate_fusion_SAA(dimension_dict, loaders_dict, device, lr, num_epochs, max_iter, criterion):
-    fitness_func_SAA = fitness_function_factory_SAA(dimension_dict, loaders_dict, device, lr, num_epochs, criterion)
+def intermediate_fusion_SAA(dimension_dict, loaders_dict, device, ub, lr, num_epochs, max_iter, mode, criterion):
+    fitness_func_SAA = fitness_function_factory_SAA(dimension_dict, loaders_dict, device, lr, num_epochs, mode, criterion)
     # Calculate number of fused MLP models + fusion head where to optimize the number of NN layers
     dim = sum(1 for data_type in dimension_dict.keys() for i in loaders_dict["train"][data_type]) + 1
     lb = np.array([1] * dim)                                                    # Lower bounds for the number of layers
-    ub = np.array([10] * dim)                                                   # Upper bounds for the number of layers
-    initial_solution = np.array([5] * dim)                                      # Initial solution (starting point)
+    ub = np.array([ub] * dim)                                                   # Upper bounds for the number of layers
+    initial_solution = np.array([9] * dim)                                      # Initial solution (starting point)
     initial_temp = 100.0                                                        # Initial temperature
     cooling_rate = 0.95                                                         # Cooling rate
     best_solution, solution_fitness = SAA(fitness_func_SAA, initial_solution, lb, ub, max_iter, initial_temp, cooling_rate)   # return the best combination of NN layers and its loss
     os.remove('temp_SAA_best_model_min_val_loss.pth')
-    model, _, _, test_loaders = get_fusion_model_and_dataloaders(dimension_dict, loaders_dict, np.around(best_solution))
+    model, _, _, test_loaders = get_fusion_model_and_dataloaders(dimension_dict, loaders_dict, np.around(best_solution), mode, device)
     test_model = load_model(model, 'SAA_best_model.pth')
     test_loss = new_validate_intermediate(test_model, test_loaders, criterion, device)     #test model with the best combination of layers
     return np.around(best_solution).astype(int), test_loss
