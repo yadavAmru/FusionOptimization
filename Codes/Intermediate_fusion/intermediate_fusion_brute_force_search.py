@@ -9,24 +9,24 @@ from early_fusion import MLP
 
 #-------------------------------------------Definition of functions---------------------------------------------------------
 class Fusion_Head(nn.Module):
-    def __init__(self, model_list, n_layers = 5, output_dim=1):
+    def __init__(self, model_list, mode, n_layers = 5, output_dim=1):
         super(Fusion_Head, self).__init__()
         self.model_list = model_list
+        self.mode = mode
         input_dim = 0
+        layer_list = nn.ModuleList()
         for i in range(len(self.model_list)):
             input_dim += list(self.model_list[i].children())[0][-2].out_features
 
-        if n_layers == None:                              # if we do not receive the number of layers -> halving (output nodes = input nodes / 2) of the nodes for each neural network layer starts
-            layer_list = nn.ModuleList()
+        if n_layers == None:              # if we do not receive the number of layers -> halving (output nodes = input nodes / 2) of the nodes for each neural network layer starts
             in_nodes = input_dim
-            if (input_dim // 2) % 2 != 0:                 # if we have odd number of input nodes, we turn it to even number and start halving
-                out_nodes = input_dim // 2 + 1
+            if input_dim == 0:                                  # we cannot have dimension = 0
+                raise ValueError("Input dimension cannot be zero!!!")
+            elif input_dim == 1 or input_dim == 2 or input_dim == 3:   # if input dimension = 1 or 2 or 3 -> we create just 1 linear layer with output dimension = 2
+                out_nodes = 2
                 layer_list.append(nn.Linear(in_nodes, out_nodes))
                 layer_list.append(nn.ReLU())
-                in_nodes = out_nodes
-            else:                                         # if we have even number of input nodes, we start halving without any changes
-                out_nodes = input_dim // 2
-            while out_nodes % 2 == 0 and (in_nodes // 2) != 1 and out_nodes != 0:
+            while (in_nodes // 2) != 0 and (in_nodes // 2) != 1 and in_nodes != 1:               # we create layers with output nodes twice less than input nodes
                 out_nodes = in_nodes//2
                 layer_list.append(nn.Linear(in_nodes, out_nodes))
                 layer_list.append(nn.ReLU())
@@ -34,7 +34,6 @@ class Fusion_Head(nn.Module):
             self.layers = nn.Sequential(*layer_list)
             out_nodes = out_nodes
         else:                         # if we receive the number of layers -> we linearly decrease number of nodes for each neural network layer
-            layer_list = nn.ModuleList()
             nodes = np.linspace(input_dim, 1, num=n_layers + 1, dtype=int)
             for idx in range(len(nodes) - 2):
                 nodes[idx], nodes[idx + 1]
@@ -43,6 +42,7 @@ class Fusion_Head(nn.Module):
             self.layers = nn.Sequential(*layer_list)
             out_nodes = nodes[-2]
         self.output_fc = nn.Linear(out_nodes, output_dim)
+        self.sigmoid_cls = nn.Sigmoid()
 
     def forward(self, x_list):
         models = []
@@ -52,6 +52,13 @@ class Fusion_Head(nn.Module):
         x = torch.cat(models, dim=1)
         x = self.layers(x)
         output = self.output_fc(x)
+        if self.mode == "classification":       # for classification we need to add sigmoid activation function to the output of linear layer
+            sigmoid_output = self.sigmoid_cls(output)
+            return sigmoid_output
+        elif self.mode == "regression":         # for regression we just return the output of linear layer
+            return output
+        else:
+            raise ValueError("Incorrect model type selected!!!")
         return output
 
 def new_train_one_epoch_intermediate(model, optimizer, train_loaders, criterion, device):
@@ -61,11 +68,11 @@ def new_train_one_epoch_intermediate(model, optimizer, train_loaders, criterion,
     for data in zip(*[train_loaders[i] for i in range(num_loaders)]):
         #Collect inputs and labels from all provided data loaders
         inputs, labels =  [data[i][0][0].to(device) for i in range(num_loaders)], [data[i][1][0].to(device) for i in range(num_loaders)]
-        outputs = model(inputs)                                         #Forward propagation
-        loss = criterion(outputs, labels[0])                            #Compute loss function
+        outputs = model(inputs)                                                       #Forward propagation
+        loss = criterion(outputs.squeeze(1), labels[0].float().unsqueeze(0))          #Compute loss function
         optimizer.zero_grad()
-        loss.backward()                                                 #Backward propagation
-        optimizer.step()                                                #Update parameters
+        loss.backward()                                                               #Backward propagation
+        optimizer.step()                                                              #Update parameters
         loss_step.append(loss.item())
     loss_curr_epoch = np.mean(loss_step)
     return loss_curr_epoch
@@ -79,7 +86,7 @@ def new_validate_intermediate(model, val_loaders, criterion, device):
             #Collect inputs and labels from all provided data loaders
             inputs, labels =  [data[i][0][0].to(device) for i in range(num_loaders)], [data[i][1][0].to(device) for i in range(num_loaders)]
             outputs = model(inputs)                                             #Forward propagation
-            val_loss = criterion(outputs, labels[0])                            #Compute loss function
+            val_loss = criterion(outputs.squeeze(1), labels[0].float().unsqueeze(0))                    #Compute loss function
             loss_step.append(val_loss.item())
     val_loss_epoch = torch.tensor(loss_step).mean().numpy()
     return val_loss_epoch
@@ -87,7 +94,7 @@ def new_validate_intermediate(model, val_loaders, criterion, device):
 def new_train_intermediate(model, optimizer, num_epochs, train_loaders, val_loaders, criterion, device, path):
     dict_log = {"train_loss": [], "val_loss": []}
     best_val_loss = float("inf")
-    model = model.to(device)
+    # model = model.to(device)
     for epoch in range(num_epochs):
         loss_curr_epoch = new_train_one_epoch_intermediate(model, optimizer, train_loaders, criterion, device)      #train for one epoch
         val_loss = new_validate_intermediate(model, val_loaders, criterion, device)               #validate in the same epoch
@@ -116,7 +123,7 @@ def load_model(model, path):
 
 
 
-def get_fusion_model_and_dataloaders(dimension_dict, loaders_dict, solution):
+def get_fusion_model_and_dataloaders(dimension_dict, loaders_dict, solution, mode, device):
     train_loaders, val_loaders, test_loaders = [], [], []
     models = []
     index = 0
@@ -127,19 +134,22 @@ def get_fusion_model_and_dataloaders(dimension_dict, loaders_dict, solution):
             val_loaders_per_type.append(val_loader)
             test_loaders_per_type.append(test_loader)
             input_dim = dimension_dict[data_type]
-            model = MLP(input_dim=input_dim, n_layers=round(solution[index]), fusion="intermediate")
+            model = MLP(input_dim=input_dim, n_layers=round(solution[index]), fusion="intermediate", mode=mode)
+            model = model.to(device)
             models.append(model)
             index += 1
         train_loaders.extend(train_loaders_per_type)                            #collect all train data loaders
         val_loaders.extend(val_loaders_per_type)                                #collect all validation data loaders
         test_loaders.extend(test_loaders_per_type)                              #collect all test data loaders
-    model = Fusion_Head(models, n_layers=round(solution[index]))                #create intermediate fusion head for fused MLP models
+    model = Fusion_Head(models, n_layers=round(solution[index]), mode=mode)     #create intermediate fusion head for fused MLP models
+    model = model.to(device)
     return model, train_loaders, val_loaders, test_loaders
 
 #-------------------------------------------Main part---------------------------------------------------------
-def calculate_loss(dimension_dict, loaders_dict, solution, device, lr, num_epochs, criterion):
+def calculate_loss(dimension_dict, loaders_dict, solution, device, lr, num_epochs, mode, criterion):
     #create intermediate fusion head for fused MLP models
-    model, train_loaders, val_loaders, _ = get_fusion_model_and_dataloaders(dimension_dict, loaders_dict, solution)
+    model, train_loaders, val_loaders, _ = get_fusion_model_and_dataloaders(dimension_dict, loaders_dict, solution, mode, device)
+    model = model.to(device)
     optimizer = optim.Adam(model.parameters(), lr=lr)
     #Training
     model_path = 'temp_Brute_force_search_best_model_min_val_loss.pth'
@@ -150,9 +160,9 @@ def calculate_loss(dimension_dict, loaders_dict, solution, device, lr, num_epoch
     loss = checkpoint['loss']                                           #Validation results of brute-force search
     return loss
 
-def intermediate_fusion_brute_force_search(dimension_dict, loaders_dict, device, lr=0.01, num_epochs=1, criterion=nn.L1Loss()):
+def intermediate_fusion_brute_force_search(dimension_dict, loaders_dict, device, ub, lr, num_epochs, mode, criterion):
     # Upper bound of number of layers
-    ub = 10
+    ub = ub
     # Calculate number of fused MLP models + fusion head where to optimize the number of NN layers
     num_solutions = sum(1 for data_type in dimension_dict.keys() for i in loaders_dict["train"][data_type]) + 1
     combinations = 2 ** num_solutions
@@ -167,7 +177,7 @@ def intermediate_fusion_brute_force_search(dimension_dict, loaders_dict, device,
             solution_arr = binary_repr(combination, width = len(binary_repr(combinations)) - 1)
             solution_arr = list(solution_arr)
             solution = orig_sol + [int(sol) for sol in solution_arr]
-            loss = calculate_loss(dimension_dict, loaders_dict, solution, device, lr, num_epochs, criterion)
+            loss = calculate_loss(dimension_dict, loaders_dict, solution, device, lr, num_epochs, mode, criterion)
             if loss < best_loss:
                 best_loss = loss
                 best_combo['loss'] = best_loss
@@ -177,7 +187,7 @@ def intermediate_fusion_brute_force_search(dimension_dict, loaders_dict, device,
         orig_sol = orig_sol + np.ones(num_solutions, dtype=int)
     # return the best combination of NN layers and its loss
     os.remove('temp_Brute_force_search_best_model_min_val_loss.pth')
-    model, _, _, test_loaders = get_fusion_model_and_dataloaders(dimension_dict, loaders_dict, best_combo['solution'])
+    model, _, _, test_loaders = get_fusion_model_and_dataloaders(dimension_dict, loaders_dict, best_combo['solution'], mode, device)
     test_model = load_model(model, 'Brute_force_search_best_model.pth')
     test_loss = new_validate_intermediate(test_model, test_loaders, criterion, device)
     return best_combo['solution'], test_loss
