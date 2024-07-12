@@ -24,11 +24,6 @@ def SMA(objf, lb, ub, dim, SearchAgents_no, Max_iter):
         sorted_indices = np.argsort(fitness_value)
         positions = positions[sorted_indices]
 
-        # Update the best position and best score
-        if fitness_value[sorted_indices[0]] < Best_score:
-            Best_score = fitness_value[sorted_indices[0]]
-            Best_pos = positions[0]
-
         # Update the weights
         w = w * np.exp(-i / Max_iter)
 
@@ -36,6 +31,7 @@ def SMA(objf, lb, ub, dim, SearchAgents_no, Max_iter):
         for j in range(SearchAgents_no):
             if random.random() < w:
                 # Approach food (exploitation)
+                Best_pos = positions[0]
                 positions[j] = positions[j] + np.random.rand() * (Best_pos - positions[j])
             else:
                 # Explore randomly
@@ -50,15 +46,17 @@ def SMA(objf, lb, ub, dim, SearchAgents_no, Max_iter):
             positions[j] = np.clip(positions[j], lb, ub)
 
       # Get the best solution
+    Best_pos = positions[0]
+    Best_score = objf(Best_pos)
     final_checkpoint = torch.load('temp_SMA_best_model_min_val_loss.pth')
     torch.save({'model_state_dict': final_checkpoint['model_state_dict']}, 'SMA_best_model.pth')
 
     return Best_pos, Best_score
 
-def fitness_function_factory_SMA(dimension_dict, loaders_dict, device, lr, num_epochs, criterion):
-    def calculate_loss(dimension_dict, loaders_dict, solution, device, lr, num_epochs, criterion):
+def fitness_function_factory_SMA(dimension_dict, loaders_dict, device, lr, num_epochs, mode, criterion):
+    def calculate_loss(dimension_dict, loaders_dict, solution, device, lr, num_epochs, mode, criterion):
         #create intermediate fusion head for fused MLP models
-        model, train_loaders, val_loaders, _ = get_fusion_model_and_dataloaders(dimension_dict, loaders_dict, solution)
+        model, train_loaders, val_loaders, _ = get_fusion_model_and_dataloaders(dimension_dict, loaders_dict, solution, mode, device)
         optimizer = optim.Adam(model.parameters(), lr=lr)
         model_path = 'temp_SMA_best_model_min_val_loss.pth'
         #train and validate fused MLP models with fusion head
@@ -68,21 +66,21 @@ def fitness_function_factory_SMA(dimension_dict, loaders_dict, device, lr, num_e
         return loss
 
     def fitness_func_SMA(solution):
-        solution_fitness = calculate_loss(dimension_dict, loaders_dict, solution, device, lr, num_epochs, criterion)
+        solution_fitness = calculate_loss(dimension_dict, loaders_dict, solution, device, lr, num_epochs, mode, criterion)
         return solution_fitness
     return fitness_func_SMA
 
 #------------------------------------------------- SMA optimization----------------------------------------------------------
-def intermediate_fusion_SMA(dimension_dict, loaders_dict, device, lr, num_epochs, max_iter, SearchAgents_no, criterion):
-    fitness_func_SMA = fitness_function_factory_SMA(dimension_dict, loaders_dict, device, lr, num_epochs, criterion)
+def intermediate_fusion_SMA(dimension_dict, loaders_dict, device, ub, lr, num_epochs, max_iter, SearchAgents_no, mode, criterion):
+    fitness_func_SMA = fitness_function_factory_SMA(dimension_dict, loaders_dict, device, lr, num_epochs, mode, criterion)
     # Calculate number of fused MLP models + fusion head where to optimize the number of NN layers
     dim = sum(1 for data_type in dimension_dict.keys() for i in loaders_dict["train"][data_type]) + 1
     # Lower and upper bounds of number of layers
-    lb, ub = 1, 10
+    lb, ub = 1, ub
     # return the best combination of NN layers and its loss
     best_solution, fitness = SMA(fitness_func_SMA, lb, ub, dim, SearchAgents_no, max_iter)
     os.remove('temp_SMA_best_model_min_val_loss.pth')
-    model, _, _, test_loaders = get_fusion_model_and_dataloaders(dimension_dict, loaders_dict, np.around(best_solution))
+    model, _, _, test_loaders = get_fusion_model_and_dataloaders(dimension_dict, loaders_dict, np.around(best_solution), mode, device)
     test_model = load_model(model, 'SMA_best_model.pth')
     test_loss = new_validate_intermediate(test_model, test_loaders, criterion, device)     #test model with the best combination of layers
     return np.around(best_solution).astype(int), test_loss
