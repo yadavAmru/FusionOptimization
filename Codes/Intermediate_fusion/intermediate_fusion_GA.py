@@ -12,18 +12,18 @@ from intermediate_fusion_brute_force_search import get_fusion_model_and_dataload
 #-------------------------------------------Definition of functions---------------------------------------------------------
 def select_mating_pool(pop, fitness, num_parents):
     # Selecting the best individuals in the current generation as parents for producing the offspring of the next generation.
-    parents = numpy.empty((num_parents, pop.shape[1]))
+    parents = np.empty((num_parents, pop.shape[1]))
     for parent_num in range(num_parents):
-        max_fitness_idx = numpy.where(fitness == numpy.max(fitness))
+        max_fitness_idx = np.where(fitness == np.max(fitness))
         max_fitness_idx = max_fitness_idx[0][0]
         parents[parent_num, :] = pop[max_fitness_idx, :]
         fitness[max_fitness_idx] = -float("inf")
     return parents
 
 def crossover(parents, offspring_size):
-    offspring = numpy.empty(offspring_size)
+    offspring = np.empty(offspring_size)
     # The point at which crossover takes place between two parents. Usually it is at the center.
-    crossover_point = numpy.uint8(offspring_size[1]/2)
+    crossover_point = np.uint8(offspring_size[1]/2)
 
     for k in range(offspring_size[0]):
         # Index of the first parent to mate.
@@ -40,7 +40,7 @@ def mutation(offspring_crossover):
     # Mutation changes a single gene in each offspring randomly.
     for idx in range(offspring_crossover.shape[0]):
         # The random value to be added to the gene.
-        random_value = numpy.random.uniform(-1.0, 1.0, 1)
+        random_value = np.random.uniform(-1.0, 1.0, 1)
         offspring_crossover[idx, 2] = offspring_crossover[idx, 2] + random_value
     return offspring_crossover
 
@@ -48,7 +48,7 @@ def GA(objf, lb, ub, num_weights, num_generations, sol_per_pop, num_parents_mati
     # Defining the population size.
     pop_size = (sol_per_pop, num_weights) # The population will have sol_per_pop chromosome where each chromosome has num_weights genes.
     #Creating the initial population.
-    new_population = numpy.random.uniform(low=lb, high=ub, size=pop_size)
+    new_population = np.random.uniform(low=lb, high=ub, size=pop_size)
 
     num_generations = num_generations
     for generation in range(num_generations):
@@ -74,7 +74,7 @@ def GA(objf, lb, ub, num_weights, num_generations, sol_per_pop, num_parents_mati
         new_population[parents.shape[0]:, :] = offspring_mutation
 
         # The best result in the current iteration.
-        # print("Best result : ", numpy.max(numpy.sum(new_population*equation_inputs, axis=1)))
+        # print("Best result : ", np.max(np.sum(new_population*equation_inputs, axis=1)))
 
     # Getting the best solution after iterating finishing all generations.
     #At first, the fitness is calculated for each solution in the final generation.
@@ -84,7 +84,7 @@ def GA(objf, lb, ub, num_weights, num_generations, sol_per_pop, num_parents_mati
         fitness.append(objf(sol))
 
     # Then return the index of that solution corresponding to the best fitness.
-    best_match_idx = numpy.where(fitness == numpy.max(fitness))
+    best_match_idx = np.where(fitness == np.max(fitness))
     best_solution = new_population[best_match_idx, :][0][0]
     best_solution = [round(x) for x in best_solution]
     solution_fitness = fitness[best_match_idx[0][0]]
@@ -96,10 +96,11 @@ def GA(objf, lb, ub, num_weights, num_generations, sol_per_pop, num_parents_mati
     return best_solution, solution_fitness
 
 
-def fitness_function_factory_GA(dimension_dict, loaders_dict, device, lr, num_epochs, criterion):
-    def calculate_loss(dimension_dict, loaders_dict, solution, device, lr, num_epochs, criterion):
+def fitness_function_factory_GA(dimension_dict, loaders_dict, device, lr, num_epochs, mode, criterion):
+    def calculate_loss(dimension_dict, loaders_dict, solution, device, lr, num_epochs, mode, criterion):
         #create intermediate fusion head for fused MLP models
-        model, train_loaders, val_loaders, _ = get_fusion_model_and_dataloaders(dimension_dict, loaders_dict, solution)
+        model, train_loaders, val_loaders, _ = get_fusion_model_and_dataloaders(dimension_dict, loaders_dict, solution, mode, device)
+        model = model.to(device)
         optimizer = optim.Adam(model.parameters(), lr=lr)
         model_path = 'temp_GA_best_model_min_val_loss.pth'
         #train and validate fused MLP models with fusion head
@@ -109,22 +110,22 @@ def fitness_function_factory_GA(dimension_dict, loaders_dict, device, lr, num_ep
         return loss
 
     def fitness_func_GA(solution):
-        loss = calculate_loss(dimension_dict, loaders_dict, solution, device, lr, num_epochs, criterion)
+        loss = calculate_loss(dimension_dict, loaders_dict, solution, device, lr, num_epochs, mode, criterion)
         solution_fitness = 1 / (loss + 1e-6)
         return solution_fitness
     return fitness_func_GA
 
 #------------------------------------------------- GA optimization----------------------------------------------------------
-def intermediate_fusion_GA(dimension_dict, loaders_dict, device, lr, num_epochs, num_generations, sol_per_pop, num_parents_mating, criterion):
-    fitness_func_GA = fitness_function_factory_GA(dimension_dict, loaders_dict, device, lr, num_epochs, criterion)
+def intermediate_fusion_GA(dimension_dict, loaders_dict, device, ub, lr, num_epochs, num_generations, sol_per_pop, num_parents_mating, mode, criterion):
+    fitness_func_GA = fitness_function_factory_GA(dimension_dict, loaders_dict, device, lr, num_epochs, mode, criterion)
     # Calculate number of fused MLP models + fusion head where to optimize the number of NN layers
     num_weights = sum(1 for data_type in dimension_dict.keys() for i in loaders_dict["train"][data_type]) + 1
     # Lower and upper bounds of number of layers
-    lb, ub = 1, 10
+    lb, ub = 1, ub
     # return the best combination of NN layers and its loss
     best_solution, solution_fitness = GA(fitness_func_GA, lb, ub, num_weights, num_generations, sol_per_pop, num_parents_mating)
     os.remove('temp_GA_best_model_min_val_loss.pth')
-    model, _, _, test_loaders = get_fusion_model_and_dataloaders(dimension_dict, loaders_dict, np.around(best_solution))
+    model, _, _, test_loaders = get_fusion_model_and_dataloaders(dimension_dict, loaders_dict, np.around(best_solution), mode, device)
     test_model = load_model(model, 'GA_best_model.pth')
     test_loss = new_validate_intermediate(test_model, test_loaders, criterion, device)      #test model with the best combination of layers
     return np.around(best_solution).astype(int), test_loss
