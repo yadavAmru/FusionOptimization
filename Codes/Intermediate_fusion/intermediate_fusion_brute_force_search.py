@@ -4,10 +4,24 @@ import torch
 import torch.nn as nn
 import torch.optim as optim
 import numpy as np
-from numpy import binary_repr
-from early_fusion import MLP
+from early_fusion import MLP_early_late_fusion
 
 #-------------------------------------------Definition of functions---------------------------------------------------------
+class MLP_intermediate_fusion(nn.Module):
+    def __init__(self, input_dim, orig_model, n_layers=None):
+        super(MLP_intermediate_fusion, self).__init__()
+        self.input_dim = input_dim
+        layer_list = nn.ModuleList()
+        if n_layers == 0:
+            raise ValueError("Cannot have 0 layers!!!")
+        elif n_layers != None:
+            self.layers = orig_model.layers[:n_layers*2]
+
+    def forward(self, x):
+        x = x.view(-1, self.input_dim)
+        x = self.layers(x.float())
+        return x
+    
 class Fusion_Head(nn.Module):
     def __init__(self, model_list, mode, n_layers = 5, output_dim=1):
         super(Fusion_Head, self).__init__()
@@ -134,23 +148,49 @@ def get_fusion_model_and_dataloaders(dimension_dict, loaders_dict, solution, mod
             val_loaders_per_type.append(val_loader)
             test_loaders_per_type.append(test_loader)
             input_dim = dimension_dict[data_type]
-            model = MLP(input_dim=input_dim, n_layers=round(solution[index]), fusion="intermediate", mode=mode)
+            orig_model = MLP_early_late_fusion(input_dim=dimension_dict[data_type], mode=mode)
+            # model_path = 'best_late_fusion_model_' + data_type + '_' + str(i) + '.pth'
+            # orig_model = load_model(orig_model, model_path)
+            # for param in orig_model.parameters():
+            #     param.requires_grad = False
+            model = MLP_intermediate_fusion(input_dim=dimension_dict[data_type], orig_model=orig_model, n_layers=round(solution[index]))
             model = model.to(device)
             models.append(model)
             index += 1
         train_loaders.extend(train_loaders_per_type)                            #collect all train data loaders
         val_loaders.extend(val_loaders_per_type)                                #collect all validation data loaders
         test_loaders.extend(test_loaders_per_type)                              #collect all test data loaders
-    model = Fusion_Head(models, n_layers=round(solution[index]), mode=mode)     #create intermediate fusion head for fused MLP models
+    model = Fusion_Head(models, mode=mode)                                      #create intermediate fusion head for fused MLP models
     model = model.to(device)
     return model, train_loaders, val_loaders, test_loaders
 
 #-------------------------------------------Main part---------------------------------------------------------
+def generate_integer_combinations(num_integers, end_value):
+    # Initialize the list to hold the combinations of integers
+    integer_combinations = []
+    # Initialize the starting array
+    start_array = [1] * num_integers
+
+    def increment_array(arr, end_value):
+        for i in range(len(arr) - 1, -1, -1):
+            if arr[i] < end_value[i]:
+                arr[i] += 1
+                return True
+            arr[i] = 1
+        return False
+    # Append the first array
+    integer_combinations.append(start_array.copy())
+    # Generate all arrays
+    while increment_array(start_array, end_value):
+        integer_combinations.append(start_array.copy())
+    return integer_combinations
+
+
 def calculate_loss(dimension_dict, loaders_dict, solution, device, lr, num_epochs, mode, criterion):
     #create intermediate fusion head for fused MLP models
     model, train_loaders, val_loaders, _ = get_fusion_model_and_dataloaders(dimension_dict, loaders_dict, solution, mode, device)
     model = model.to(device)
-    optimizer = optim.Adam(model.parameters(), lr=lr)
+    optimizer = optim.Adam(model.parameters(), lr=lr, weight_decay=1e-4)
     #Training
     model_path = 'temp_Brute_force_search_best_model_min_val_loss.pth'
     print("Combination of layers: {}".format(solution))
@@ -160,31 +200,24 @@ def calculate_loss(dimension_dict, loaders_dict, solution, device, lr, num_epoch
     loss = checkpoint['loss']                                           #Validation results of brute-force search
     return loss
 
-def intermediate_fusion_brute_force_search(dimension_dict, loaders_dict, device, ub, lr, num_epochs, mode, criterion):
-    # Upper bound of number of layers
-    ub = ub
+def intermediate_fusion_brute_force_search(dimension_dict, loaders_dict, device, lr, num_epochs, mode, criterion):
     # Calculate number of fused MLP models + fusion head where to optimize the number of NN layers
-    num_solutions = sum(1 for data_type in dimension_dict.keys() for i in loaders_dict["train"][data_type]) + 1
-    combinations = 2 ** num_solutions
-    orig_sol = np.ones(num_solutions, dtype=int)
+    num_integers = sum(1 for data_type in dimension_dict.keys() for i in loaders_dict["train"][data_type]) # Number of integers in each array
+    # Upper bound of number of layers
+    end_value = [int(np.log2(up_b)) for up_b in dimension_dict.values()]
+    layer_combinations = generate_integer_combinations(num_integers, end_value)
     best_loss = float("inf")
-    best_solution = orig_sol
+    best_solution = [1] * num_integers
     best_combo = {'loss': best_loss, 'solution': best_solution}
-    # calculate combination of layers by incrementing number of layers in each MLP model
-    # one by one till upper boundary: [1,1,1] -> [1,1,2] -> [1,2,2] -> [2,2,2] -> [1,2,3] -> ...
-    for i in range(ub - 1):
-        for combination in range(combinations):
-            solution_arr = binary_repr(combination, width = len(binary_repr(combinations)) - 1)
-            solution_arr = list(solution_arr)
-            solution = orig_sol + [int(sol) for sol in solution_arr]
-            loss = calculate_loss(dimension_dict, loaders_dict, solution, device, lr, num_epochs, mode, criterion)
-            if loss < best_loss:
-                best_loss = loss
-                best_combo['loss'] = best_loss
-                best_combo['solution'] = solution
-                final_checkpoint = torch.load('temp_Brute_force_search_best_model_min_val_loss.pth')
-                torch.save({'model_state_dict': final_checkpoint['model_state_dict']}, 'Brute_force_search_best_model.pth')
-        orig_sol = orig_sol + np.ones(num_solutions, dtype=int)
+    # calculate combination of layers by incrementing number of layers in each MLP model one by one till upper boundary
+    for solution in layer_combinations:
+        loss = calculate_loss(dimension_dict, loaders_dict, solution, device, lr, num_epochs, mode, criterion)
+        if loss < best_loss:
+            best_loss = loss
+            best_combo['loss'] = best_loss
+            best_combo['solution'] = solution
+            final_checkpoint = torch.load('temp_Brute_force_search_best_model_min_val_loss.pth')
+            torch.save({'model_state_dict': final_checkpoint['model_state_dict']}, 'Brute_force_search_best_model.pth')
     # return the best combination of NN layers and its loss
     os.remove('temp_Brute_force_search_best_model_min_val_loss.pth')
     model, _, _, test_loaders = get_fusion_model_and_dataloaders(dimension_dict, loaders_dict, best_combo['solution'], mode, device)
