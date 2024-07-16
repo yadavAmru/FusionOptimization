@@ -4,7 +4,7 @@ import torch
 import torch.nn as nn
 import torch.optim as optim
 import numpy as np
-from early_fusion import MLP, train, validate, load_model
+from early_fusion import MLP_early_late_fusion, train, validate, load_model
 
 #----------------------------------------------------Late fusion---------------------------------------------------------------
 def late_fusion(dimension_dict, loaders_dict, device, lr, num_epochs, mode, criterion):
@@ -12,9 +12,9 @@ def late_fusion(dimension_dict, loaders_dict, device, lr, num_epochs, mode, crit
     dict_log = {}
     for data_type in dimension_dict.keys():
         for i, (train_loader, val_loader, test_loader) in enumerate(zip(loaders_dict["train"][data_type], loaders_dict["val"][data_type], loaders_dict["test"][data_type])):
-            model = MLP(input_dim=dimension_dict[data_type], fusion="late", mode=mode)
+            model = MLP_early_late_fusion(input_dim=dimension_dict[data_type], mode=mode)
             model = model.to(device)
-            optimizer = optim.Adam(model.parameters(), lr=lr)
+            optimizer = optim.Adam(model.parameters(), lr=lr, weight_decay=1e-4)
             model_path = 'best_late_fusion_model_' + data_type + '_' + str(i) + '.pth'
             log = train(model, optimizer, num_epochs, train_loader, val_loader, criterion, device, model_path)   #train model with validation
             dict_log[data_type] = log
