@@ -24,7 +24,7 @@ def GWO(objf, lb, ub, dim, SearchAgents_no, Max_iter):
     if not isinstance(lb, list):  #  effect ： To determine whether an object is a known type . Its first parameter （object） As object , The second parameter （type） For type name , If the type of the object is the same as that of parameter 2, return True
         lb = [lb] * dim  #  Generate [100,100,.....100]30 individual
     if not isinstance(ub, list):
-        ub = [ub] * dim
+        ub = ub #[ub] * dim
 
     #======== Initialize the location of all wolves ===================
     Positions = np.zeros((SearchAgents_no, dim))
@@ -109,7 +109,7 @@ def fitness_function_factory_GWO(dimension_dict, loaders_dict, device, lr, num_e
     def calculate_loss(dimension_dict, loaders_dict, solution, device, lr, num_epochs, mode, criterion):
         #create intermediate fusion head for fused MLP models
         model, train_loaders, val_loaders, _ = get_fusion_model_and_dataloaders(dimension_dict, loaders_dict, solution, mode, device)
-        optimizer = optim.Adam(model.parameters(), lr=lr)
+        optimizer = optim.Adam(model.parameters(), lr=lr, weight_decay=1e-4)
         model_path = 'temp_GWO_best_model_min_val_loss.pth'
         #train and validate fused MLP models with fusion head
         dict_log = new_train_intermediate(model, optimizer, num_epochs, train_loaders, val_loaders, criterion, device, model_path)
@@ -123,12 +123,12 @@ def fitness_function_factory_GWO(dimension_dict, loaders_dict, device, lr, num_e
     return fitness_func_GWO
 
 #------------------------------------------------- GWO optimization----------------------------------------------------------
-def intermediate_fusion_GWO(dimension_dict, loaders_dict, device, ub, lr, num_epochs, Max_iter, SearchAgents_no, mode, criterion):
+def intermediate_fusion_GWO(dimension_dict, loaders_dict, device, lr, num_epochs, Max_iter, SearchAgents_no, mode, criterion):
     fitness_func_GWO = fitness_function_factory_GWO(dimension_dict, loaders_dict, device, lr, num_epochs, mode, criterion)
     # Calculate number of fused MLP models + fusion head where to optimize the number of NN layers
-    dim = sum(1 for data_type in dimension_dict.keys() for i in loaders_dict["train"][data_type]) + 1
+    dim = sum(1 for data_type in dimension_dict.keys() for i in loaders_dict["train"][data_type])
     # Lower and upper bounds of number of layers
-    lb, ub = 1, ub
+    lb, ub = 1, [int(np.log2(up_b)) for up_b in dimension_dict.values()]
     # return the best combination of NN layers and its loss
     best_solution, solution_fitness = GWO(fitness_func_GWO, lb, ub, dim, SearchAgents_no, Max_iter)
     os.remove('temp_GWO_best_model_min_val_loss.pth')
