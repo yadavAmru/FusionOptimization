@@ -18,16 +18,15 @@ from intermediate_fusion_SHC import intermediate_fusion_SHC
 if __name__ == "__main__":
     #Hyperparameters
     num_epochs = 20
-    lr = 0.001
-    ub = 15
-    criterion=nn.L1Loss()
+    lr = 0.0005
+    criterion=nn.BCELoss()
     num_generations = 5 # The number of iterations in GA
     Max_iter = 5 # The number of iterations in GWO
     max_iter = 5 # The number of iterations in PSO
     SearchAgents_no = 5 # Number of wolves seeking value in GWO
     num_particles = 5 # The number of particles in PSO
-    sol_per_pop = 1 # The number of solutions per step in GA
-    num_parents_mating = 1
+    sol_per_pop = 5 # The number of solutions per step in GA
+    num_parents_mating = 5
     device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
     print("------------------------------------------------------------Training--------------------------------------------------------------------------")
     #Training fusion models
@@ -41,31 +40,31 @@ if __name__ == "__main__":
     end_time_late_fusion = time.time()
     print("-------------------------------------Start of intermediate fusion with brute-force search-----------------------------------------------------")
     start_time_brute_force_search = time.time()
-    brute_force_solution, intermediate_brute_force_loss = intermediate_fusion_brute_force_search(dimension_dict_gas, loaders_dict_gas, device, ub, lr, num_epochs, mode='classification', criterion=criterion)
+    brute_force_solution, intermediate_brute_force_loss = intermediate_fusion_brute_force_search(dimension_dict_gas, loaders_dict_gas, device, lr, num_epochs, criterion, mode='classification')
     end_time_brute_force_search = time.time()
     print("---------------------------------------------Start of intermediate fusion with GA-------------------------------------------------------------")
     start_time_GA = time.time()
-    solution_GA, intermediate_fusion_loss_GA = intermediate_fusion_GA(dimension_dict_gas, loaders_dict_gas, device, ub, lr, num_epochs, num_generations, sol_per_pop, num_parents_mating, mode='classification', criterion=criterion)
+    solution_GA, intermediate_fusion_loss_GA = intermediate_fusion_GA(dimension_dict_gas, loaders_dict_gas, device, lr, num_epochs, num_generations, sol_per_pop, num_parents_mating, mode='classification', criterion=criterion)
     end_time_GA = time.time()
     print("---------------------------------------------Start of intermediate fusion with GWO------------------------------------------------------------")
     start_time_GWO = time.time()
-    solution_GWO, intermediate_fusion_loss_GWO = intermediate_fusion_GWO(dimension_dict_gas, loaders_dict_gas, device, ub, lr, num_epochs, Max_iter, SearchAgents_no, mode='classification', criterion=criterion)
+    solution_GWO, intermediate_fusion_loss_GWO = intermediate_fusion_GWO(dimension_dict_gas, loaders_dict_gas, device, lr, num_epochs, Max_iter, SearchAgents_no, mode='classification', criterion=criterion)
     end_time_GWO = time.time()
     print("---------------------------------------------Start of intermediate fusion with PSO------------------------------------------------------------")
     start_time_PSO = time.time()
-    solution_PSO, intermediate_fusion_loss_PSO = intermediate_fusion_PSO(dimension_dict_gas, loaders_dict_gas, device, ub, lr, num_epochs, max_iter, num_particles, mode='classification', criterion=criterion)
+    solution_PSO, intermediate_fusion_loss_PSO = intermediate_fusion_PSO(dimension_dict_gas, loaders_dict_gas, device, lr, num_epochs, max_iter, num_particles, mode='classification', criterion=criterion)
     end_time_PSO = time.time()
     print("---------------------------------------------Start of intermediate fusion with SMA------------------------------------------------------------")
     start_time_SMA = time.time()
-    solution_SMA, intermediate_fusion_loss_SMA = intermediate_fusion_SMA(dimension_dict_gas, loaders_dict_gas, device, ub, lr, num_epochs, max_iter, SearchAgents_no, mode='classification', criterion=criterion)
+    solution_SMA, intermediate_fusion_loss_SMA = intermediate_fusion_SMA(dimension_dict_gas, loaders_dict_gas, device, lr, num_epochs, max_iter, SearchAgents_no, mode='classification', criterion=criterion)
     end_time_SMA = time.time()
     print("---------------------------------------------Start of intermediate fusion with SAA------------------------------------------------------------")
     start_time_SAA = time.time()
-    solution_SAA, intermediate_fusion_loss_SAA = intermediate_fusion_SAA(dimension_dict_gas, loaders_dict_gas, device, ub, lr, num_epochs, max_iter, mode='classification', criterion=criterion)
+    solution_SAA, intermediate_fusion_loss_SAA = intermediate_fusion_SAA(dimension_dict_gas, loaders_dict_gas, device, lr, num_epochs, max_iter, mode='classification', criterion=criterion)
     end_time_SAA = time.time()
     print("---------------------------------------------Start of intermediate fusion with SHC------------------------------------------------------------")
     start_time_SHC = time.time()
-    solution_SHC, intermediate_fusion_loss_SHC = intermediate_fusion_SHC(dimension_dict_gas, loaders_dict_gas, device, ub, lr, num_epochs, max_iter, mode='classification', criterion=criterion)
+    solution_SHC, intermediate_fusion_loss_SHC = intermediate_fusion_SHC(dimension_dict_gas, loaders_dict_gas, device, lr, num_epochs, max_iter, mode='classification', criterion=criterion)
     end_time_SHC = time.time()
     print("------------------------------------------------------------Test results---------------------------------------------------------------------------")
     print("Early fusion test loss: {:.5f} \t Time: {:.3f} seconds".format(early_fusion_loss, end_time_early_fusion - start_time_early_fusion))
