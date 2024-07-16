@@ -7,57 +7,40 @@ import torch.optim as optim
 import numpy as np
 
 #-----------------------------------------------------Definition of functions-----------------------------------------------------
-#MLP model flexible structure
-class MLP(nn.Module):
-    def __init__(self, input_dim, fusion, mode, n_layers=None, output_dim=1):
-        super(MLP, self).__init__()
+#MLP model
+class MLP_early_late_fusion(nn.Module):
+    def __init__(self, input_dim, mode):
+        super(MLP_early_late_fusion, self).__init__()
         self.input_dim = input_dim
-        self.fusion = fusion
         self.mode = mode
-        self.output_dim = output_dim
         layer_list = nn.ModuleList()
-        if n_layers == None:              # if we do not receive the number of layers -> halving (output nodes = input nodes / 2) of the nodes for each neural network layer starts
-            in_nodes = input_dim
-            if input_dim == 0:                                  # we cannot have dimension = 0
-                raise ValueError("Input dimension cannot be zero!!!")
-            elif input_dim == 1 or input_dim == 2 or input_dim == 3:   # if input dimension = 1 or 2 or 3 -> we create just 1 linear layer with output dimension = 2
-                out_nodes = 2
-                layer_list.append(nn.Linear(in_nodes, out_nodes))
-                layer_list.append(nn.ReLU())
-            while (in_nodes // 2) != 0 and (in_nodes // 2) != 1 and in_nodes != 1:               # we create layers with output nodes twice less than input nodes until we reach
-                out_nodes = in_nodes//2
-                layer_list.append(nn.Linear(in_nodes, out_nodes))
-                layer_list.append(nn.ReLU())
-                in_nodes = out_nodes
-            self.layers = nn.Sequential(*layer_list)
-            self.out_nodes = out_nodes
-        else:                                 # if we receive the number of layers -> we linearly decrease number of nodes for each neural network layer
-            nodes = np.linspace(input_dim, 1, num=n_layers + 2, dtype=int)
-            for idx in range(len(nodes) - 2):
-                nodes[idx], nodes[idx + 1]
-                layer_list.append(nn.Linear(nodes[idx], nodes[idx + 1]))
-                layer_list.append(nn.ReLU())
-            self.layers = nn.Sequential(*layer_list)
-            self.out_nodes = nodes[-2]
+        in_nodes = input_dim
+        if input_dim == 0:                                  # we cannot have dimension = 0
+            raise ValueError("Input dimension cannot be zero!!!")
+        elif input_dim == 1:            # if input dimension = 1, then we create just 1 linear layer with output dimension = 1
+            out_nodes = 1
+            layer_list.append(nn.Linear(in_nodes, out_nodes))
+            layer_list.append(nn.ReLU())
+        while (in_nodes // 2) != 0 and in_nodes != 1:               # we create layers with output nodes twice less than input nodes until we reach output_dim = 1
+            out_nodes = in_nodes//2
+            layer_list.append(nn.Linear(in_nodes, out_nodes))
+            layer_list.append(nn.ReLU())
+            in_nodes = out_nodes
+        self.layers = nn.Sequential(*layer_list)
+        self.out_nodes = out_nodes
 
     def forward(self, x):
         x = x.view(-1, self.input_dim)
         x = self.layers(x.float())
-        if self.fusion == "intermediate":       # for intermediate fusion we return extracted features before the output layer
+        if self.mode == "classification":       # for classification we need to add sigmoid activation function to the output of linear layer
+            sigmoid = nn.Sigmoid().to(torch.device("cuda:0" if torch.cuda.is_available() else "cpu"))
+            sigmoid_output = sigmoid(x)
+            return sigmoid_output
+        elif self.mode == "regression":         # for regression we just return the output of linear layer
             return x
-        elif self.fusion == "early" or self.fusion ==  "late":        # for early and late fusion we return MLP model with output linear layer
-            output_fc = nn.Linear(self.out_nodes, self.output_dim).to(torch.device("cuda:0" if torch.cuda.is_available() else "cpu"))
-            y_pred = output_fc(x)
-            if self.mode == "classification":       # for classification we need to add sigmoid activation function to the output of linear layer
-                sigmoid = nn.Sigmoid().to(torch.device("cuda:0" if torch.cuda.is_available() else "cpu"))
-                sigmoid_output = sigmoid(y_pred)
-                return sigmoid_output
-            elif self.mode == "regression":         # for regression we just return the output of linear layer
-                return y_pred
-            else:
-                raise ValueError("Incorrect model type selected!!!")
         else:
-            raise ValueError("Incorrect fusion selected!!!")
+            raise ValueError("Incorrect model type selected!!!")
+
 
 def train_one_epoch(model, optimizer, train_loader, criterion, device):
   model.train()
@@ -120,9 +103,9 @@ def train(model, optimizer, num_epochs, train_loader, val_loader, criterion, dev
 #----------------------------------------------------Early fusion---------------------------------------------------------------
 def early_fusion(dimension_dict, loaders_dict, device, lr, num_epochs, mode, criterion):
     input_dim = sum(list(dimension_dict.values()))
-    model = MLP(input_dim=input_dim, fusion="early", mode=mode)
+    model = MLP_early_late_fusion(input_dim=input_dim, mode=mode)
     model = model.to(device)
-    optimizer = optim.Adam(model.parameters(), lr=lr)
+    optimizer = optim.Adam(model.parameters(), lr=lr, weight_decay=1e-4)
     model_path = 'best_early_fusion_model.pth'
     #train model with validation
     dict_log = train(model, optimizer, num_epochs, loaders_dict['train']['combined'], loaders_dict['val']['combined'], criterion, device, model_path)
