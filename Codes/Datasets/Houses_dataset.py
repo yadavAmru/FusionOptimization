@@ -1,3 +1,4 @@
+# git clone https://github.com/emanhamed/Houses-dataset
 from sklearn.preprocessing import LabelBinarizer
 from sklearn.preprocessing import MinMaxScaler
 import pandas as pd
