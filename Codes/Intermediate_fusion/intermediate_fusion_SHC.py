@@ -49,7 +49,7 @@ def fitness_function_factory_SHC(dimension_dict, loaders_dict, device, lr, num_e
     def calculate_loss(dimension_dict, loaders_dict, solution, device, lr, num_epochs, mode, criterion):
         #create intermediate fusion head for fused MLP models
         model, train_loaders, val_loaders, _ = get_fusion_model_and_dataloaders(dimension_dict, loaders_dict, solution, mode, device)
-        optimizer = optim.Adam(model.parameters(), lr=lr)
+        optimizer = optim.Adam(model.parameters(), lr=lr, weight_decay=1e-4)
         model_path = 'temp_SHC_best_model_min_val_loss.pth'
         #train and validate fused MLP models with fusion head
         dict_log = new_train_intermediate(model, optimizer, num_epochs, train_loaders, val_loaders, criterion, device, model_path)
@@ -63,11 +63,11 @@ def fitness_function_factory_SHC(dimension_dict, loaders_dict, device, lr, num_e
     return fitness_func_SHC
 
 #------------------------------------------------- SHC optimization----------------------------------------------------------
-def intermediate_fusion_SHC(dimension_dict, loaders_dict, device, ub, lr, num_epochs, max_iter, mode, criterion):
+def intermediate_fusion_SHC(dimension_dict, loaders_dict, device, lr, num_epochs, max_iter, mode, criterion):
     fitness_func_SHC = fitness_function_factory_SHC(dimension_dict, loaders_dict, device, lr, num_epochs, mode, criterion)
     # Calculate number of fused MLP models + fusion head where to optimize the number of NN layers
-    dim = sum(1 for data_type in dimension_dict.keys() for i in loaders_dict["train"][data_type]) + 1         # Number of solutions
-    lb, ub = 1, ub                                                                                            #  Lower and upper bound of the search space
+    dim = sum(1 for data_type in dimension_dict.keys() for i in loaders_dict["train"][data_type])             # Number of solutions
+    lb, ub = 1, [int(np.log2(up_b)) for up_b in dimension_dict.values()]                                           #  Lower and upper bound of the search space
     step_size = 0.5                                                                                           # Step size for the search space
 
     best_solution, solution_fitness = SHC(fitness_func_SHC, lb, ub, dim, max_iter, step_size)  # return the best combination of NN layers and its loss
