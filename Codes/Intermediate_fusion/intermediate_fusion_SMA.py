@@ -57,7 +57,7 @@ def fitness_function_factory_SMA(dimension_dict, loaders_dict, device, lr, num_e
     def calculate_loss(dimension_dict, loaders_dict, solution, device, lr, num_epochs, mode, criterion):
         #create intermediate fusion head for fused MLP models
         model, train_loaders, val_loaders, _ = get_fusion_model_and_dataloaders(dimension_dict, loaders_dict, solution, mode, device)
-        optimizer = optim.Adam(model.parameters(), lr=lr)
+        optimizer = optim.Adam(model.parameters(), lr=lr, weight_decay=1e-4)
         model_path = 'temp_SMA_best_model_min_val_loss.pth'
         #train and validate fused MLP models with fusion head
         dict_log = new_train_intermediate(model, optimizer, num_epochs, train_loaders, val_loaders, criterion, device, model_path)
@@ -71,12 +71,12 @@ def fitness_function_factory_SMA(dimension_dict, loaders_dict, device, lr, num_e
     return fitness_func_SMA
 
 #------------------------------------------------- SMA optimization----------------------------------------------------------
-def intermediate_fusion_SMA(dimension_dict, loaders_dict, device, ub, lr, num_epochs, max_iter, SearchAgents_no, mode, criterion):
+def intermediate_fusion_SMA(dimension_dict, loaders_dict, device, lr, num_epochs, max_iter, SearchAgents_no, mode, criterion):
     fitness_func_SMA = fitness_function_factory_SMA(dimension_dict, loaders_dict, device, lr, num_epochs, mode, criterion)
     # Calculate number of fused MLP models + fusion head where to optimize the number of NN layers
-    dim = sum(1 for data_type in dimension_dict.keys() for i in loaders_dict["train"][data_type]) + 1
+    dim = sum(1 for data_type in dimension_dict.keys() for i in loaders_dict["train"][data_type])
     # Lower and upper bounds of number of layers
-    lb, ub = 1, ub
+    lb, ub = 1, [int(np.log2(up_b)) for up_b in dimension_dict.values()]
     # return the best combination of NN layers and its loss
     best_solution, fitness = SMA(fitness_func_SMA, lb, ub, dim, SearchAgents_no, max_iter)
     os.remove('temp_SMA_best_model_min_val_loss.pth')
